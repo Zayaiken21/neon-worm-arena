@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: slither-pro-polished
+    name: slither-pro-advanced
     env: node
     plan: free
     buildCommand: npm run build

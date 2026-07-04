@@ -1,135 +1,92 @@
-'use strict';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
-const INDEX = fs.readFileSync(path.join(__dirname, 'index.html'));
-const MAX_PLAYERS = 15;
-const MAP = 3600;
-const TICK = 1000 / 30;
-const SEND = 1000 / 15;
-const rooms = new Map();
-const sockets = new Set();
-let ridSeq = 1;
+const MAX = 15, MAP = 5600, TICK = 50;
+const players = new Map();
+const sockets = new Map();
+let foods = [];
+let nextId = 1;
 
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-function rand(a,b){ return a + Math.random() * (b-a); }
-function dist(a,b,c,d){ return Math.hypot(a-c,b-d); }
-function id(prefix='id'){ return prefix + Math.random().toString(36).slice(2,8) + Date.now().toString(36).slice(-3); }
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const dist2=(a,b)=>{const x=a.x-b.x,y=a.y-b.y;return x*x+y*y};
+const rand=(a,b)=>a+Math.random()*(b-a);
+const safeSpawn=()=>({x:rand(600,MAP-600), y:rand(600,MAP-600)});
+const colors=['aqua','sunset','violet','lime','rose','dog'];
 
-function makeFood(n=260){ const arr=[]; for(let i=0;i<n;i++) arr.push({id:id('f'),x:rand(-MAP,MAP),y:rand(-MAP,MAP),r:rand(3.2,7.5),h:Math.floor(rand(0,360))}); return arr; }
-function makeRoom(){
-  const room = { id:'Arena-' + String(ridSeq++).padStart(2,'0'), players:new Map(), food:makeFood(), last:Date.now(), created:Date.now() };
-  rooms.set(room.id, room); return room;
+function makeFood(n=1, near=null){ for(let i=0;i<n;i++) foods.push({id:crypto.randomUUID().slice(0,8),x:near?near.x+rand(-90,90):rand(80,MAP-80),y:near?near.y+rand(-90,90):rand(80,MAP-80),v:rand(2,8),c:Math.floor(rand(0,6))}); }
+makeFood(320);
+function aliveCount(){let n=0; for(const p of players.values()) if(p.alive) n++; return n;}
+function publicServers(){ return [{id:'arena',count:aliveCount(),max:MAX}]; }
+function send(ws,obj){ if(ws.readyState===1) ws.send(JSON.stringify(obj)); }
+function broadcast(obj){ const msg=JSON.stringify(obj); for(const ws of sockets.values()) if(ws.readyState===1) ws.send(msg); }
+function createPlayer(ws,data={}){
+  const id = 'p'+(nextId++); const sp=safeSpawn();
+  const p={id,name:String(data.name||'Player').slice(0,14),skin:colors.includes(data.skin)?data.skin:'aqua',x:sp.x,y:sp.y,ang:rand(0,Math.PI*2),target:0,speed:4.1,boost:false,alive:true,score:0,len:34,r:22,body:[],cool:0,ws};
+  for(let i=0;i<p.len;i++) p.body.push({x:p.x-Math.cos(p.ang)*i*12,y:p.y-Math.sin(p.ang)*i*12});
+  players.set(id,p); sockets.set(id,ws); ws.pid=id; return p;
 }
-function openRoom(){
-  for(const r of rooms.values()) if(r.players.size < MAX_PLAYERS) return r;
-  return makeRoom();
+function respawn(p){
+  const sp=safeSpawn(); p.x=sp.x;p.y=sp.y;p.ang=rand(0,Math.PI*2);p.target=p.ang;p.speed=4.1;p.boost=false;p.alive=true;p.score=Math.max(0,Math.floor(p.score*0.25));p.len=34;p.r=22;p.cool=20;p.body=[];
+  for(let i=0;i<p.len;i++) p.body.push({x:p.x-Math.cos(p.ang)*i*12,y:p.y-Math.sin(p.ang)*i*12});
 }
-function roomList(){
-  const list = [...rooms.values()].filter(r=>r.players.size>0 || Date.now()-r.created<60000).map(r=>({id:r.id,count:r.players.size,max:MAX_PLAYERS}));
-  if(!list.length){ const r = makeRoom(); return [{id:r.id,count:0,max:MAX_PLAYERS}]; }
-  return list;
-}
-function spawnPlayer(name, skin){
-  const x=rand(-900,900), y=rand(-900,900);
-  const pts=[]; for(let i=0;i<32;i++) pts.push({x:x-i*7,y});
-  const allowed = new Set(['aqua','sun','violet','lime','rose','dog']);
-  skin = allowed.has(String(skin)) ? String(skin) : 'aqua';
-  return { id:id('p'), name:String(name||'Player').slice(0,14), skin, x,y, a:rand(0,Math.PI*2), tx:x+200, ty:y, pts, score:0, alive:true, boost:false, speed:3.8, join:Date.now(), inv:70 };
-}
-function publicPlayer(p){ return {id:p.id,name:p.name,skin:p.skin,x:p.x,y:p.y,a:p.a,pts:p.pts,score:Math.floor(p.score),alive:p.alive}; }
-function broadcastRoom(r, obj){ for(const c of r.players.values()) send(c.ws, obj); }
-function broadcastLobby(){ const msg={type:'rooms', rooms:roomList()}; for(const ws of sockets) if(!ws.roomId) send(ws,msg); }
-
-const server = http.createServer((req,res)=>{
-  if(req.url === '/' || req.url.startsWith('/?')){ res.writeHead(200, {'content-type':'text/html; charset=utf-8','cache-control':'no-store'}); return res.end(INDEX); }
-  res.writeHead(404); res.end('Not found');
-});
-
-server.on('upgrade', (req, socket) => {
-  const key = req.headers['sec-websocket-key'];
-  if(!key){ socket.destroy(); return; }
-  const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
-  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: '+accept+'\r\n\r\n');
-  socket.id = id('s'); socket.alive = true; sockets.add(socket); send(socket,{type:'rooms',rooms:roomList()});
-  socket.on('data', buf => readFrames(socket, buf));
-  socket.on('close', ()=>drop(socket)); socket.on('error', ()=>drop(socket));
-});
-function encode(str){
-  const payload = Buffer.from(str); let header;
-  if(payload.length < 126){ header = Buffer.from([0x81, payload.length]); }
-  else if(payload.length < 65536){ header = Buffer.alloc(4); header[0]=0x81; header[1]=126; header.writeUInt16BE(payload.length,2); }
-  else { header = Buffer.alloc(10); header[0]=0x81; header[1]=127; header.writeBigUInt64BE(BigInt(payload.length),2); }
-  return Buffer.concat([header,payload]);
-}
-function send(ws,obj){ if(ws.destroyed) return; try{ ws.write(encode(JSON.stringify(obj))); }catch(e){} }
-function readFrames(ws, buffer){
-  let off=0;
-  while(off + 2 <= buffer.length){
-    const b1=buffer[off++], b2=buffer[off++]; const opcode=b1&15; let len=b2&127; const masked=!!(b2&128);
-    if(len===126){ if(off+2>buffer.length) return; len=buffer.readUInt16BE(off); off+=2; }
-    else if(len===127){ if(off+8>buffer.length) return; len=Number(buffer.readBigUInt64BE(off)); off+=8; }
-    let mask; if(masked){ if(off+4>buffer.length) return; mask=buffer.slice(off,off+4); off+=4; }
-    if(off+len>buffer.length) return;
-    let data=buffer.slice(off,off+len); off+=len;
-    if(masked){ const out=Buffer.alloc(len); for(let i=0;i<len;i++) out[i]=data[i]^mask[i%4]; data=out; }
-    if(opcode===8){ drop(ws); return; }
-    if(opcode===1){ try{ onMsg(ws, JSON.parse(data.toString())); }catch(e){} }
-  }
-}
-function onMsg(ws,m){
-  if(m.type==='list') return send(ws,{type:'rooms',rooms:roomList()});
-  if(m.type==='join'){
-    if(ws.roomId) drop(ws, true);
-    let r = m.roomId && rooms.get(m.roomId) && rooms.get(m.roomId).players.size<MAX_PLAYERS ? rooms.get(m.roomId) : openRoom();
-    const p = spawnPlayer(m.name, m.skin); ws.roomId=r.id; ws.playerId=p.id; p.ws=ws; r.players.set(p.id,p);
-    send(ws,{type:'joined',you:p.id,room:{id:r.id,count:r.players.size,max:MAX_PLAYERS},map:MAP});
-    broadcastRoom(r,{type:'notice',text:'A player entered the arena'}); broadcastLobby(); return;
-  }
-  if(m.type==='input' && ws.roomId){ const r=rooms.get(ws.roomId), p=r&&r.players.get(ws.playerId); if(!p||!p.alive) return; p.tx=Number(m.x)||p.x; p.ty=Number(m.y)||p.y; p.boost=!!m.boost; }
-  if(m.type==='home') drop(ws, true);
-}
-function drop(ws, keep=false){
-  if(ws.roomId){ const r=rooms.get(ws.roomId); if(r){ r.players.delete(ws.playerId); if(r.players.size===0 && Date.now()-r.created>30000) rooms.delete(r.id); else broadcastRoom(r,{type:'notice',text:'Arena host switched'}); } }
-  ws.roomId=null; ws.playerId=null; if(!keep){ sockets.delete(ws); try{ws.destroy();}catch(e){} } else send(ws,{type:'rooms',rooms:roomList()}); broadcastLobby();
+function kill(p){
+  if(!p.alive) return; p.alive=false; p.boost=false;
+  const step=Math.max(2,Math.floor(p.body.length/35));
+  for(let i=0;i<p.body.length;i+=step) makeFood(1,p.body[i]);
+  p.body=[];
 }
 function step(){
-  const now=Date.now();
-  for(const r of rooms.values()){
-    const dt=Math.min(2,(now-r.last)/TICK); r.last=now;
-    for(const p of r.players.values()){
-      if(!p.alive) continue;
-      const dx=p.tx-p.x, dy=p.ty-p.y; const target=Math.atan2(dy,dx); let da=((target-p.a+Math.PI*3)%(Math.PI*2))-Math.PI;
-      p.a += clamp(da,-0.16,0.16)*dt;
-      const boosting=p.boost && p.pts.length>34 && p.score>6; const sp=(boosting?5.9:3.65)*dt;
-      p.x=clamp(p.x+Math.cos(p.a)*sp,-MAP,MAP); p.y=clamp(p.y+Math.sin(p.a)*sp,-MAP,MAP);
-      const last=p.pts[0];
-      if(!last || dist(p.x,p.y,last.x,last.y)>4.6) p.pts.unshift({x:p.x,y:p.y});
-      const maxLen=32+Math.floor(p.score/2.1); while(p.pts.length>maxLen) p.pts.pop();
-      if(boosting){ p.score=Math.max(0,p.score-0.045*dt); if(Math.random()<0.32) r.food.push({id:id('f'),x:p.pts[p.pts.length-1].x,y:p.pts[p.pts.length-1].y,r:4,h:Math.floor(rand(0,360))}); }
-      for(let i=r.food.length-1;i>=0;i--){ const f=r.food[i]; if(dist(p.x,p.y,f.x,f.y)<18+f.r){ p.score += f.r; r.food.splice(i,1); } }
-      p.inv=Math.max(0,p.inv-dt);
-    }
-    while(r.food.length<260) r.food.push({id:id('f'),x:rand(-MAP,MAP),y:rand(-MAP,MAP),r:rand(3.2,7.5),h:Math.floor(rand(0,360))});
-    const players=[...r.players.values()].filter(p=>p.alive);
-    for(const p of players){ if(p.inv>0) continue; let dead=false;
-      if(Math.abs(p.x)>=MAP-5||Math.abs(p.y)>=MAP-5) dead=true;
-      for(const q of players){ if(dead) break; for(let i=(p.id===q.id?16:5); i<q.pts.length; i+=3){ const s=q.pts[i]; if(s && dist(p.x,p.y,s.x,s.y)<16){ dead=true; break; } } }
-      if(dead){ p.alive=false; for(let i=0;i<p.pts.length;i+=2) r.food.push({id:id('f'),x:p.pts[i].x+rand(-10,10),y:p.pts[i].y+rand(-10,10),r:rand(4.5,9),h:Math.floor(rand(0,360))});
-        p.score=0; p.pts=[]; send(p.ws,{type:'dead'}); }
-    }
+  while(foods.length<320) makeFood(1);
+  for(const p of players.values()){
+    if(!p.alive) continue;
+    if(p.cool>0) p.cool--;
+    let d=((p.target-p.ang+Math.PI*3)%(Math.PI*2))-Math.PI;
+    p.ang += clamp(d,-0.16,0.16);
+    const boostOk = p.boost && p.len>24;
+    const spd = boostOk?6.2:4.15;
+    if(boostOk && Math.random()<0.32){ p.len-=0.055; if(Math.random()<0.22) makeFood(1,{x:p.x-Math.cos(p.ang)*35,y:p.y-Math.sin(p.ang)*35}); }
+    p.x += Math.cos(p.ang)*spd; p.y += Math.sin(p.ang)*spd;
+    if(p.x<30||p.y<30||p.x>MAP-30||p.y>MAP-30){ kill(p); continue; }
+    p.body.unshift({x:p.x,y:p.y});
+    const want=Math.floor(p.len); while(p.body.length>want) p.body.pop();
+    for(let i=foods.length-1;i>=0;i--){ const f=foods[i]; if((p.x-f.x)**2+(p.y-f.y)**2 < (p.r+12)**2){ foods.splice(i,1); p.score+=Math.ceil(f.v); p.len+=0.95+f.v*0.09; p.r=clamp(18+p.len*0.08,20,44); }}
   }
+  // enemy body collisions only, own body is safe
+  const alive=[...players.values()].filter(p=>p.alive);
+  for(const p of alive){
+    if(p.cool>0) continue;
+    outer: for(const o of alive){ if(o.id===p.id) continue; for(let i=6;i<o.body.length;i+=2){ const b=o.body[i]; if((p.x-b.x)**2+(p.y-b.y)**2 < (p.r+o.r*0.55)**2){ kill(p); break outer; } } }
+  }
+  const snapshot={type:'state',map:MAP,server:{count:aliveCount(),max:MAX},foods:foods.slice(0,360),players:[...players.values()].map(p=>({id:p.id,name:p.name,skin:p.skin,x:p.x,y:p.y,ang:p.ang,alive:p.alive,score:p.score,r:p.r,body:p.body.filter((_,i)=>i%2===0)}))};
+  broadcast(snapshot);
 }
-setInterval(step, TICK);
-setInterval(()=>{
-  for(const r of rooms.values()){
-    if(!r.players.size) continue;
-    const state={type:'state',room:{id:r.id,count:r.players.size,max:MAX_PLAYERS},players:[...r.players.values()].map(publicPlayer),food:r.food.slice(0,320),leader:[...r.players.values()].sort((a,b)=>b.score-a.score).slice(0,5).map(p=>({name:p.name,score:Math.floor(p.score)}))};
-    broadcastRoom(r,state);
-  }
-}, SEND);
-setInterval(broadcastLobby, 2000);
-server.listen(PORT,()=>console.log('Slither Pro Live running on :' + PORT));
+setInterval(step,TICK);
+setInterval(()=>broadcast({type:'servers',servers:publicServers()}),1000);
+
+const server=http.createServer((req,res)=>{
+  if(req.url==='/health'){res.end('ok');return;}
+  const file=path.join(__dirname,'index.html');
+  res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store'}); fs.createReadStream(file).pipe(res);
+});
+server.on('upgrade',(req,socket)=>{
+  if(req.headers.upgrade?.toLowerCase()!=='websocket'){socket.destroy();return;}
+  const key=req.headers['sec-websocket-key'];
+  const accept=crypto.createHash('sha1').update(key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: '+accept+'\r\n\r\n');
+  socket.readyState=1; socket.send=(s)=>{const b=Buffer.from(s); let h; if(b.length<126){h=Buffer.from([129,b.length]);}else{h=Buffer.alloc(4);h[0]=129;h[1]=126;h.writeUInt16BE(b.length,2);} socket.write(Buffer.concat([h,b]));};
+  send(socket,{type:'servers',servers:publicServers()});
+  socket.on('data',buf=>{ try{ let off=2, len=buf[1]&127; if(len===126){len=buf.readUInt16BE(2);off=4;} if(len===127) return; const mask=buf.slice(off,off+4); off+=4; const data=Buffer.alloc(len); for(let i=0;i<len;i++) data[i]=buf[off+i]^mask[i%4]; const msg=JSON.parse(data.toString());
+    let p=players.get(socket.pid);
+    if(msg.type==='join'){ if(!p){ if(aliveCount()>=MAX) return send(socket,{type:'full'}); p=createPlayer(socket,msg); } else { p.name=String(msg.name||p.name).slice(0,14); p.skin=colors.includes(msg.skin)?msg.skin:p.skin; if(!p.alive) respawn(p); } send(socket,{type:'joined',id:p.id,map:MAP}); broadcast({type:'servers',servers:publicServers()}); }
+    if(msg.type==='input'&&p){ if(Number.isFinite(msg.a)) p.target=msg.a; p.boost=!!msg.b; }
+    if(msg.type==='home'&&p){ kill(p); p.alive=false; broadcast({type:'servers',servers:publicServers()}); }
+    if(msg.type==='respawn'&&p){ respawn(p); send(socket,{type:'joined',id:p.id,map:MAP}); }
+  }catch(e){} });
+  socket.on('close',()=>{ const p=players.get(socket.pid); if(p){players.delete(p.id); sockets.delete(p.id); broadcast({type:'servers',servers:publicServers()});}});
+  socket.on('end',()=>socket.emit('close'));
+  socket.on('error',()=>socket.emit('close'));
+});
+server.listen(PORT,()=>console.log('Slither A+ running on '+PORT));

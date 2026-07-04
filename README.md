@@ -1,24 +1,15 @@
-# Slither Pro Live V2
+# Slither A+ Live
 
-Compact Render-ready multiplayer HTML slither arena.
+Compact Render-ready multiplayer HTML game. No dependencies. No node_modules.
 
-## Files
-- `index.html` — full game client, menu, skins, joystick, rendering
-- `server.js` — HTTP + built-in WebSocket multiplayer server, no external packages
-- `package.json` — zero dependencies
-- `render.yaml` — Render config
-- `README.md`
+Files:
+- index.html
+- server.js
+- package.json
+- render.yaml
+- README.md
 
-## Render settings
-- Build Command: `npm run build`
-- Start Command: `npm start`
+Render settings:
+- Build Command: npm run build
+- Start Command: npm start
 - Root Directory: leave blank
-
-## Fixed in V2
-- Camera is pulled back for clearer gameplay.
-- Smoother slither rendering.
-- Death drops glowing food orbs for other players.
-- Body collision/trapping makes players restart.
-- Home button returns to the main menu.
-- Server list only shows count like `0/15`.
-- Added detailed wiener dog worm skin.

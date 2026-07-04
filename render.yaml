@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: slither-pro-live
+    name: slither-a-plus
     env: node
     plan: free
     buildCommand: npm run build

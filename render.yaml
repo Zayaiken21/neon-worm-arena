@@ -3,11 +3,11 @@ services:
     name: neon-worm-arena
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: 20.20.2
       - key: MAX_PLAYERS
         value: 15
       - key: MAP_SIZE

@@ -1,14 +1,11 @@
-Render settings for this project:
+IMPORTANT: Your Render dashboard is still set to the wrong Build Command: rpm install
 
-Build Command:
-npm install
+Use exactly these Render settings:
 
-Start Command:
-npm start
+Runtime: Node
+Build Command: npm ci
+Start Command: npm start
+Root Directory: leave blank if this folder is the repo root
+Node Version: 20.20.2
 
-Environment variables:
-NODE_VERSION=20
-MAX_PLAYERS=15
-MAP_SIZE=5200
-
-IMPORTANT: Do not use `rpm install`. That command fails on Render Node services because rpm is not available.
+If Render still says "Running build command 'rpm install'", it is using old dashboard settings, not the files. Open Render > Settings > Build & Deploy and replace rpm install with npm ci.

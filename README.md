@@ -1,39 +1,23 @@
-# Neon Worm Arena — Render Ready
+# Neon Worm Arena
 
-A multiplayer Slither-style HTML game using Node.js, Express, and Socket.IO.
-
-## Features
-- 15 real-player cap with visible 0/15 status
-- 5200x5200 arena: large, but not too huge
-- Selectable neon worm skins
-- Food, growth, boost cost, wall collision, body collision, respawn, leaderboard
-- Mobile drag/swipe steering and desktop mouse/space controls
-- Bots keep the arena active while waiting for players
-- Render deployment files included
-
-## Local run
-```bash
-npm install
-npm start
-```
-Open:
-```text
-http://localhost:3000
-```
+Render-ready multiplayer Slither-style arena built with Node.js, Express, Socket.IO, and a pure HTML/CSS/JS client.
 
 ## Render settings
-Use these exact commands:
+
+Use these exactly:
+
+- Runtime: Node
+- Build Command: `npm ci`
+- Start Command: `npm start`
+- Node Version: `20.20.2`
+
+If Render logs show `Running build command 'rpm install'`, Render is using an old/manual dashboard setting. Change it in Render Dashboard > Settings > Build & Deploy.
+
+## Local test
 
 ```bash
-Build Command: npm install
-Start Command: npm start
+npm ci
+npm start
 ```
 
-Set environment variables:
-```text
-NODE_VERSION=20
-MAX_PLAYERS=15
-MAP_SIZE=5200
-```
-
-Do not use `rpm install`; Render Node web services need npm commands.
+Then open http://localhost:3000

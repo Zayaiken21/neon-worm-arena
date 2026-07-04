@@ -1,7 +1,6 @@
 services:
   - type: web
-    name: slither-a-plus
+    name: slither-fixed-final
     env: node
-    plan: free
     buildCommand: npm run build
     startCommand: npm start

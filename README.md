@@ -1,10 +1,9 @@
-# Slither Pro Start Fixed
+# Slither Pro Fixed Final
 
-Compact Render-ready multiplayer HTML game. This ZIP is packaged with files at the root so Render can find package.json immediately.
+5 root files. Zero dependencies. Render settings:
 
-Render settings:
-- Build Command: `npm run build`
-- Start Command: `npm start`
-- Root Directory: leave blank
+Build Command: `npm run build`
+Start Command: `npm start`
+Root Directory: leave blank
 
-Files: index.html, server.js, package.json, render.yaml, README.md
+Fixes: menu starts, live arena, smooth movement, no ghost duplicate players, alive count only, death orb drops, own-body safe, enemy/wall kills, home button, mobile joystick, wiener dog skin.

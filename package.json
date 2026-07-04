@@ -1,8 +1,1 @@
-{
-  "name":"slither-a-plus",
-  "version":"1.0.0",
-  "private":true,
-  "type":"commonjs",
-  "scripts":{"build":"node -e \"console.log('Build OK - zero dependencies')\"","start":"node server.js"},
-  "engines":{"node":">=20 <21"}
-}
+{"name":"slither-fixed-final","version":"1.0.0","private":true,"type":"commonjs","scripts":{"build":"node -e \"console.log('Build OK: HTML + zero dependency Node server')\"","start":"node server.js"},"engines":{"node":">=20 <21"}}

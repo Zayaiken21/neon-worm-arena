@@ -1,35 +1,19 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Neon Worm Arena</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <canvas id="game"></canvas>
-  <div class="noise"></div>
-  <section id="menu" class="panel hero">
-    <div class="brand"><span class="orb"></span><div><b>Neon Worm Arena</b><small>Multiplayer server · <span id="serverCount">0/15</span></small></div></div>
-    <h1>Slither-style arena, polished for web.</h1>
-    <p>Eat glow orbs, grow longer, boost wisely, and make rivals crash into your trail. Server limit is 15 real players.</p>
-    <label>Player name<input id="name" maxlength="16" placeholder="Your name" /></label>
-    <div class="skinTitle">Pick your worm</div>
-    <div id="skins" class="skins"></div>
-    <button id="play">Join Available Server</button>
-    <div class="tips">Mobile: swipe/drag to steer · Hold boost button to sprint · Desktop: mouse + space</div>
-  </section>
-  <section id="hud" class="hud hidden">
-    <div class="pill">Server <b id="hudCount">0/15</b></div>
-    <div class="pill">Score <b id="score">0</b></div>
-    <div class="pill">Length <b id="length">0</b></div>
-  </section>
-  <aside id="leaderboard" class="leaderboard hidden"><h3>Leaderboard</h3><ol id="leaders"></ol></aside>
-  <button id="boost" class="boost hidden">BOOST</button>
-  <section id="dead" class="panel death hidden">
-    <h2>Worm Down</h2><p id="deathText">You crashed.</p><button id="again">Respawn</button><button id="home">Change Worm</button>
-  </section>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js"></script>
-</body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Slither Live Compact</title><style>
+*{box-sizing:border-box}body{margin:0;overflow:hidden;background:#050816;color:white;font-family:Inter,system-ui,Arial,sans-serif;touch-action:none}canvas{display:block;width:100vw;height:100vh;background:radial-gradient(circle at 50% 50%,#172055,#050816 72%)}.panel{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(5,8,22,.94),rgba(15,30,80,.78));z-index:5}.card{width:min(92vw,460px);padding:24px;border:1px solid rgba(255,255,255,.18);border-radius:28px;background:rgba(10,14,35,.76);box-shadow:0 28px 80px #0008;backdrop-filter:blur(14px);text-align:center}.logo{font-size:42px;font-weight:900;letter-spacing:-2px;margin:0 0 8px}.logo span{color:#00f5ff;text-shadow:0 0 18px #00f5ff}.muted{color:#b9c7ff;margin:0 0 18px}.row{display:flex;gap:10px;margin:12px 0}.row>*{flex:1}input,button{border:0;border-radius:16px;padding:15px 16px;font-size:16px}input{background:#111936;color:white;outline:1px solid #33406d}button{background:linear-gradient(135deg,#00f5ff,#8a5cff);font-weight:900;color:#061025;cursor:pointer}.skins{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin:14px 0}.skin{height:34px;border-radius:999px;border:2px solid #ffffff22;box-shadow:0 0 16px var(--c);background:var(--c)}.skin.sel{border-color:#fff;transform:scale(1.08)}#hud{position:fixed;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:3}.pill,.board{background:rgba(7,10,25,.62);border:1px solid #ffffff22;border-radius:18px;padding:10px 12px;backdrop-filter:blur(12px)}.pill{font-weight:900}.board{min-width:178px}.board b{display:block;margin-bottom:5px;color:#00f5ff}.board div{font-size:13px;color:#dfe6ff;margin:2px 0}.joy{position:fixed;width:132px;height:132px;border-radius:50%;left:24px;bottom:26px;background:#ffffff12;border:1px solid #ffffff24;z-index:4;display:none}.knob{position:absolute;width:58px;height:58px;border-radius:50%;left:36px;top:36px;background:#ffffff66;box-shadow:0 0 20px #00f5ff}.boost{position:fixed;right:28px;bottom:38px;width:92px;height:92px;border-radius:50%;background:linear-gradient(135deg,#ff3df2,#ffd43d);z-index:4;display:none;align-items:center;justify-content:center;font-weight:900;color:#120617;box-shadow:0 0 35px #ff3df288}.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#000a;border:1px solid #fff3;border-radius:999px;padding:10px 16px;color:#fff;z-index:10;display:none}@media(max-width:800px){.joy,.boost{display:flex}.logo{font-size:34px}.board{min-width:150px}.card{padding:20px}}
+</style></head><body><canvas id="game"></canvas><div id="hud"><div class="pill" id="online">Server 0/15</div><div class="board"><b>Leaderboard</b><div id="leaders">Waiting...</div></div></div><div class="joy" id="joy"><div class="knob" id="knob"></div></div><div class="boost" id="boost">BOOST</div><div class="toast" id="toast"></div><div class="panel" id="menu"><div class="card"><h1 class="logo"><span>Slither</span> Live</h1><p class="muted">Compact multiplayer arena • 15 players • boost, trap, swarm, grow.</p><div class="row"><input id="name" maxlength="14" placeholder="Worm name" value="Player"></div><div class="skins" id="skins"></div><button id="play">Join Server 0/15</button><p class="muted" style="font-size:13px;margin-top:14px">One live arena is created when the first player joins. If it fills, new players wait until a slot opens.</p></div></div><script src="/socket.io/socket.io.js"></script><script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');let W=innerWidth,H=innerHeight,DPR=devicePixelRatio||1;function size(){W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}addEventListener('resize',size);size();
+const colors=['#00f5ff','#ff3df2','#9dff3d','#ffd43d','#8a5cff','#ff6b35','#41ff9f','#ffffff'];let skin=0,state=null,myId=null,cam={x:0,y:0},target={a:0,b:false},mouse={x:W/2,y:H/2};
+const socket=io({transports:['websocket','polling']}),menu=document.getElementById('menu'),play=document.getElementById('play'),online=document.getElementById('online'),leaders=document.getElementById('leaders'),toast=document.getElementById('toast');
+const skins=document.getElementById('skins');colors.forEach((c,i)=>{let d=document.createElement('div');d.className='skin'+(i?'':' sel');d.style='--c:'+c;d.onclick=()=>{skin=i;document.querySelectorAll('.skin').forEach(x=>x.classList.remove('sel'));d.classList.add('sel')};skins.appendChild(d)});
+function msg(t){toast.textContent=t;toast.style.display='block';setTimeout(()=>toast.style.display='none',2200)}
+socket.on('hello',d=>{online.textContent=`Server ${d.online}/${d.cap}`;play.textContent=`Join Server ${d.online}/${d.cap}`});socket.on('full',d=>msg(d.message||'Server full'));socket.on('joined',d=>{myId=d.id;menu.style.display='none';msg('Joined live arena')});socket.on('state',s=>{state=s;online.textContent=`Server ${s.online}/${s.cap}`;play.textContent=`Join Server ${s.online}/${s.cap}`;leaders.innerHTML=s.board.map((p,i)=>`<div>${i+1}. ${p.n} — ${p.s}</div>`).join('')||'Waiting...'});
+play.onclick=()=>socket.emit('join',{name:document.getElementById('name').value||'Player',skin});
+addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});addEventListener('mousedown',()=>target.b=true);addEventListener('mouseup',()=>target.b=false);addEventListener('keydown',e=>{if(e.code==='Space')target.b=true});addEventListener('keyup',e=>{if(e.code==='Space')target.b=false});
+const joy=document.getElementById('joy'),knob=document.getElementById('knob'),boost=document.getElementById('boost');let joyOn=false,center={x:90,y:H-90};joy.addEventListener('touchstart',e=>{joyOn=true;moveJoy(e.touches[0]);e.preventDefault()},{passive:false});joy.addEventListener('touchmove',e=>{moveJoy(e.touches[0]);e.preventDefault()},{passive:false});joy.addEventListener('touchend',()=>{joyOn=false;knob.style.left='36px';knob.style.top='36px'});boost.addEventListener('touchstart',e=>{target.b=true;e.preventDefault()},{passive:false});boost.addEventListener('touchend',e=>{target.b=false;e.preventDefault()},{passive:false});
+function moveJoy(t){const r=joy.getBoundingClientRect();center={x:r.left+r.width/2,y:r.top+r.height/2};let dx=t.clientX-center.x,dy=t.clientY-center.y,m=Math.hypot(dx,dy)||1,lim=38;if(m>lim){dx=dx/m*lim;dy=dy/m*lim}knob.style.left=(36+dx)+'px';knob.style.top=(36+dy)+'px';target.a=Math.atan2(dy,dx)}
+setInterval(()=>{if(!myId)return;if(!joyOn)target.a=Math.atan2(mouse.y-H/2,mouse.x-W/2);socket.emit('input',target)},33);
+function lerp(a,b,t){return a+(b-a)*t}function me(){return state&&state.players.find(p=>p.id===myId)}
+function drawGrid(map){ctx.strokeStyle='rgba(255,255,255,.055)';ctx.lineWidth=1;const step=140;let sx=Math.floor((cam.x-W/2)/step)*step,sy=Math.floor((cam.y-H/2)/step)*step;for(let x=sx;x<cam.x+W/2+step;x+=step){ctx.beginPath();ctx.moveTo(x-cam.x+W/2,0);ctx.lineTo(x-cam.x+W/2,H);ctx.stroke()}for(let y=sy;y<cam.y+H/2+step;y+=step){ctx.beginPath();ctx.moveTo(0,y-cam.y+H/2);ctx.lineTo(W,y-cam.y+H/2,H);ctx.stroke()}ctx.strokeStyle='rgba(0,245,255,.35)';ctx.lineWidth=5;ctx.strokeRect(-map/2-cam.x+W/2,-map/2-cam.y+H/2,map,map)}
+function world(x,y){return [x-cam.x+W/2,y-cam.y+H/2]}
+function draw(){requestAnimationFrame(draw);ctx.clearRect(0,0,W,H);ctx.fillStyle='#050816';ctx.fillRect(0,0,W,H);if(!state){ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText('Join to start multiplayer server',W/2,H/2);return}const p=me();if(p&&p.alive){cam.x=lerp(cam.x,p.x,.12);cam.y=lerp(cam.y,p.y,.12)}drawGrid(state.map);for(const f of state.foods){const [x,y]=world(f.x,f.y);if(x<-30||x>W+30||y<-30||y>H+30)continue;ctx.beginPath();ctx.fillStyle=f.c;ctx.shadowColor=f.c;ctx.shadowBlur=14;ctx.arc(x,y,3+f.v*.55,0,7);ctx.fill();ctx.shadowBlur=0}const snakes=[...state.players].sort((a,b)=>(a.id===myId?1:0)-(b.id===myId?1:0));for(const s of snakes){if(!s.alive)continue;const c=colors[s.c%colors.length];ctx.lineCap='round';ctx.lineJoin='round';for(let pass=0;pass<2;pass++){ctx.beginPath();s.segs.forEach((g,i)=>{const [x,y]=world(g.x,g.y);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});ctx.strokeStyle=pass?'rgba(255,255,255,.34)':c;ctx.lineWidth=pass?9:24;ctx.shadowColor=c;ctx.shadowBlur=pass?0:18;ctx.stroke()}ctx.shadowBlur=0;const [hx,hy]=world(s.x,s.y);ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(hx+Math.cos(s.a+.65)*8,hy+Math.sin(s.a+.65)*8,3,0,7);ctx.arc(hx+Math.cos(s.a-.65)*8,hy+Math.sin(s.a-.65)*8,3,0,7);ctx.fill();ctx.fillStyle=s.id===myId?'#00f5ff':'#e8eeff';ctx.font='700 13px system-ui';ctx.textAlign='center';ctx.fillText(s.n,hx,hy-25)}}draw();
+</script></body></html>

@@ -1,20 +1,18 @@
 {
-  "name": "neon-worm-arena",
-  "version": "1.0.1",
+  "name": "slither-live-compact",
+  "version": "1.0.0",
   "private": true,
-  "description": "Render-ready multiplayer Slither-style worm arena with 15-player rooms.",
+  "description": "Compact HTML multiplayer slither arena for Render",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "build": "node -e \"console.log('Build OK: no compile step needed')\"",
-    "health": "node -e \"require('fs').accessSync('server.js'); require('fs').accessSync('public/index.html'); console.log('Health files OK')\""
+    "build": "node -e \"console.log('No build needed - compact HTML game')\""
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20 <21"
   },
   "dependencies": {
-    "express": "4.19.2",
-    "socket.io": "4.7.5"
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
   }
 }

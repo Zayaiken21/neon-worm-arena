@@ -1,206 +1,113 @@
 const express = require('express');
 const http = require('http');
-const path = require('path');
 const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
-  pingTimeout: 20000,
-  pingInterval: 10000,
-  transports: ['websocket', 'polling']
-});
+const io = new Server(server, { cors: { origin: '*' }, transports: ['websocket', 'polling'] });
 
 const PORT = process.env.PORT || 3000;
-const MAX_PLAYERS = Number(process.env.MAX_PLAYERS || 15);
-const MAP_SIZE = Number(process.env.MAP_SIZE || 5200);
-const TICK_RATE = 30;
-const SNAPSHOT_RATE = 15;
-const FOOD_TARGET = 440;
-const BOT_TARGET = 6;
-const PLAYER_RADIUS = 11;
-const BASE_SPEED = 150;
-const BOOST_SPEED = 245;
-const BOT_PREFIX = 'bot:';
+const MAX_PLAYERS = 15;
+const MAP = 4200;
+const FOOD_MAX = 620;
+const TICK = 1000 / 30;
+const VIEW_PAYLOAD_MS = 1000 / 15;
+const COLORS = ['#00f5ff','#ff3df2','#9dff3d','#ffd43d','#8a5cff','#ff6b35','#41ff9f','#ffffff'];
 
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('/health', (_, res) => res.json({ ok: true, players: players.size, maxPlayers: MAX_PLAYERS }));
+let players = new Map();
+let inputs = new Map();
+let foods = [];
+let bots = [];
+let lastBroadcast = 0;
 
-const players = new Map();
-const foods = new Map();
-const inputs = new Map();
-let foodSeq = 1;
-let botSeq = 1;
-
-const skins = [
-  { id: 'aurora', colors: ['#00f5ff', '#7c3cff', '#ff4ecd'] },
-  { id: 'citrus', colors: ['#fff95b', '#ff9f1c', '#2ec4b6'] },
-  { id: 'berry', colors: ['#ff4ecd', '#9b5de5', '#00bbf9'] },
-  { id: 'mint', colors: ['#80ffdb', '#48bfe3', '#64dfdf'] },
-  { id: 'lava', colors: ['#ff3c38', '#ff8c42', '#ffd166'] },
-  { id: 'cosmic', colors: ['#f72585', '#7209b7', '#3a0ca3'] }
-];
-
-function rand(min, max) { return Math.random() * (max - min) + min; }
-function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-function dist2(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; }
-function safeName(name) { return String(name || 'Player').replace(/[<>]/g, '').trim().slice(0, 16) || 'Player'; }
-function randomSkin(id) { return skins.find(s => s.id === id) || skins[Math.floor(Math.random() * skins.length)]; }
-function spawnPoint() {
-  for (let i = 0; i < 60; i++) {
-    const p = { x: rand(-MAP_SIZE * 0.42, MAP_SIZE * 0.42), y: rand(-MAP_SIZE * 0.42, MAP_SIZE * 0.42) };
-    let ok = true;
-    for (const pl of players.values()) {
-      if (dist2(p, pl.head) < 360 * 360) { ok = false; break; }
+function rand(a,b){ return a + Math.random() * (b-a); }
+function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function wrapAngle(a){ while(a > Math.PI) a -= Math.PI*2; while(a < -Math.PI) a += Math.PI*2; return a; }
+function id(){ return Math.random().toString(36).slice(2,9); }
+function insideMap(x,y){ const r=MAP/2-30; return x>-r&&x<r&&y>-r&&y<r; }
+function food(){ return { id:id(), x:rand(-MAP/2+90,MAP/2-90), y:rand(-MAP/2+90,MAP/2-90), v:rand(2,8), c:COLORS[(Math.random()*COLORS.length)|0] }; }
+function seedFood(){ while(foods.length < FOOD_MAX) foods.push(food()); }
+function makeSnake(pid, name, skin, bot=false){
+  const angle = rand(-Math.PI, Math.PI), len = bot ? 18 : 16, x=rand(-900,900), y=rand(-900,900);
+  const segs=[]; for(let i=0;i<len;i++) segs.push({x:x-Math.cos(angle)*i*13,y:y-Math.sin(angle)*i*13});
+  return { id:pid, name:(name||'Worm').slice(0,14), skin:clamp(skin|0,0,COLORS.length-1), bot, alive:true, x,y, angle, target:angle, score:0, length:len, radius:11, boost:false, respawn:0, segs, kills:0 };
+}
+function joinCount(){ let n=0; for(const p of players.values()) if(!p.bot) n++; return n; }
+function publicPlayer(p){ return {id:p.id,n:p.name,s:p.score|0,k:p.kills|0,c:p.skin,b:p.bot}; }
+function dropFoodFromSnake(p){ for(let i=0;i<p.segs.length;i+=2){ const s=p.segs[i]; foods.push({id:id(),x:s.x+rand(-12,12),y:s.y+rand(-12,12),v:rand(4,10),c:COLORS[p.skin]}); } }
+function kill(p, killer){ if(!p.alive) return; p.alive=false; p.respawn=p.bot?900:1600; dropFoodFromSnake(p); if(killer && killer.id!==p.id) killer.kills++; }
+function respawn(p){ const n=makeSnake(p.id,p.name,p.skin,p.bot); Object.assign(p,n); }
+function nearestTarget(p){
+  let best=null, bd=999999;
+  for(const q of players.values()) if(q.alive && q.id!==p.id){ const d=dist(p,q); if(d<bd){bd=d; best=q;} }
+  let fbest=null, fd=bd<500?999999:420;
+  for(const f of foods){ const d=Math.hypot(f.x-p.x,f.y-p.y); if(d<fd){fd=d; fbest=f;} }
+  return best && bd<650 ? best : fbest;
+}
+function botThink(p){
+  const t=nearestTarget(p); let desired=p.angle;
+  if(t){ desired=Math.atan2(t.y-p.y,t.x-p.x); }
+  if(Math.random()<0.012) desired += rand(-1.2,1.2);
+  p.target=desired; p.boost=!!t && !t.v && dist(p,t)<460 && p.length>22;
+}
+function updateSnake(p, dt){
+  if(!p.alive){ p.respawn-=dt; if(p.respawn<=0) respawn(p); return; }
+  if(p.bot) botThink(p); else { const inp=inputs.get(p.id); if(inp){ p.target=inp.a; p.boost=!!inp.b; } }
+  const turn=0.18; p.angle += clamp(wrapAngle(p.target-p.angle), -turn, turn);
+  const canBoost=p.length>18; const speed=(p.boost&&canBoost?7.0:4.2) * dt/(1000/30);
+  p.x += Math.cos(p.angle)*speed; p.y += Math.sin(p.angle)*speed;
+  p.x=clamp(p.x,-MAP/2+25,MAP/2-25); p.y=clamp(p.y,-MAP/2+25,MAP/2-25);
+  p.segs.unshift({x:p.x,y:p.y});
+  let maxLen=Math.floor(p.length + p.score/8);
+  if(p.boost&&canBoost&&p.segs.length%4===0){ p.score=Math.max(0,p.score-1); foods.push({id:id(),x:p.x-Math.cos(p.angle)*18,y:p.y-Math.sin(p.angle)*18,v:2,c:COLORS[p.skin]}); }
+  while(p.segs.length>maxLen) p.segs.pop();
+  for(let i=foods.length-1;i>=0;i--){ const f=foods[i]; if(Math.hypot(f.x-p.x,f.y-p.y)<p.radius+10){ p.score+=f.v; p.length+=0.18; foods.splice(i,1); } }
+  if(!insideMap(p.x,p.y)) kill(p,null);
+}
+function collisions(){
+  const arr=[...players.values()].filter(p=>p.alive);
+  for(const p of arr){
+    for(const q of arr){
+      const start=q.id===p.id?12:4;
+      for(let i=start;i<q.segs.length;i+=2){
+        const s=q.segs[i];
+        if(Math.hypot(p.x-s.x,p.y-s.y)<p.radius+7){ kill(p,q); break; }
+      }
+      if(!p.alive) break;
     }
-    if (ok) return p;
   }
-  return { x: rand(-600, 600), y: rand(-600, 600) };
 }
-function makeSegments(head, angle, count) {
-  const segs = [];
-  for (let i = 0; i < count; i++) segs.push({ x: head.x - Math.cos(angle) * i * 14, y: head.y - Math.sin(angle) * i * 14 });
-  return segs;
+function maintainBots(){
+  const humans=joinCount(); const wanted=Math.max(0, Math.min(6, 8-humans));
+  bots=bots.filter(id=>players.has(id));
+  while(bots.length<wanted){ const bid='bot_'+id(); bots.push(bid); players.set(bid, makeSnake(bid, ['Nova','Viper','Orbit','Pixel','Comet','Ghost'][bots.length%6], bots.length%COLORS.length, true)); }
+  while(bots.length>wanted){ players.delete(bots.pop()); }
 }
-function newPlayer(id, name, skinId, isBot = false) {
-  const head = spawnPoint();
-  const angle = rand(0, Math.PI * 2);
-  const skin = randomSkin(skinId);
+function payload(){
   return {
-    id, name: safeName(name), skin: skin.id, colors: skin.colors, head, angle, targetAngle: angle,
-    segments: makeSegments(head, angle, 20), score: 0, length: 20, alive: true, boost: false,
-    lastBoostFood: 0, invincible: 1.8, isBot, turnSpeed: isBot ? 2.2 : 4.4, botThink: 0, botTarget: null
+    map: MAP, cap: MAX_PLAYERS, online: joinCount(),
+    foods,
+    players:[...players.values()].map(p=>({ id:p.id,n:p.name,c:p.skin,s:p.score|0,k:p.kills,b:p.bot,alive:p.alive,x:p.x,y:p.y,a:p.angle,segs:p.segs.filter((_,i)=>i%2===0) })),
+    board:[...players.values()].filter(p=>p.alive).sort((a,b)=>b.score-a.score).slice(0,8).map(publicPlayer)
   };
 }
-function addFood(x = rand(-MAP_SIZE / 2, MAP_SIZE / 2), y = rand(-MAP_SIZE / 2, MAP_SIZE / 2), value = 1, hue = null) {
-  const id = 'f' + foodSeq++;
-  foods.set(id, { id, x, y, value, hue: hue ?? Math.floor(rand(0, 360)), pulse: rand(0, 9) });
-}
-function ensureFood() { while (foods.size < FOOD_TARGET) addFood(); }
-function ensureBots() {
-  const humanCount = [...players.values()].filter(p => !p.isBot).length;
-  const botCount = [...players.values()].filter(p => p.isBot).length;
-  const wanted = Math.max(0, Math.min(BOT_TARGET, 10 - humanCount));
-  while (botCount + [...players.values()].filter(p => p.isBot).length - botCount < wanted) {
-    const id = BOT_PREFIX + botSeq++;
-    players.set(id, newPlayer(id, ['Nova','Orbit','Viper','Comet','Pixel','Ziggy'][botSeq % 6], skins[botSeq % skins.length].id, true));
-  }
-  for (const [id, p] of players) {
-    if (p.isBot && [...players.values()].filter(x => x.isBot).length > wanted) players.delete(id);
-  }
-}
-function angleDiff(a, b) { return Math.atan2(Math.sin(b - a), Math.cos(b - a)); }
-function turnToward(p, target, dt) {
-  const max = p.turnSpeed * dt;
-  const d = clamp(angleDiff(p.angle, target), -max, max);
-  p.angle += d;
-}
-function killPlayer(victim, killerName = '') {
-  if (!victim.alive) return;
-  victim.alive = false;
-  for (let i = 0; i < victim.segments.length; i += 2) {
-    const s = victim.segments[i];
-    addFood(s.x + rand(-8, 8), s.y + rand(-8, 8), Math.max(1, Math.floor(victim.length / 25)), 320);
-  }
-  if (!victim.isBot) io.to(victim.id).emit('dead', { score: victim.score, killerName });
-  else players.delete(victim.id);
-}
-function updateBot(p, dt) {
-  p.botThink -= dt;
-  if (p.botThink <= 0) {
-    p.botThink = rand(0.3, 0.9);
-    let closest = null, best = Infinity;
-    for (const f of foods.values()) {
-      const d = dist2(p.head, f);
-      if (d < best) { best = d; closest = f; }
-    }
-    p.botTarget = closest;
-  }
-  let targetAngle = p.angle + rand(-0.15, 0.15);
-  if (p.botTarget) targetAngle = Math.atan2(p.botTarget.y - p.head.y, p.botTarget.x - p.head.x);
-  if (Math.abs(p.head.x) > MAP_SIZE * 0.44 || Math.abs(p.head.y) > MAP_SIZE * 0.44) targetAngle = Math.atan2(-p.head.y, -p.head.x);
-  p.boost = p.length > 35 && Math.random() < 0.03;
-  turnToward(p, targetAngle, dt);
-}
-function step(dt) {
-  ensureFood();
-  ensureBots();
-  for (const p of players.values()) {
-    if (!p.alive) continue;
-    if (p.isBot) updateBot(p, dt);
-    else {
-      const inp = inputs.get(p.id);
-      if (inp) { p.targetAngle = inp.angle; p.boost = !!inp.boost && p.length > 24; }
-      turnToward(p, p.targetAngle, dt);
-    }
-    p.invincible = Math.max(0, p.invincible - dt);
-    const speed = p.boost ? BOOST_SPEED : BASE_SPEED;
-    p.head.x += Math.cos(p.angle) * speed * dt;
-    p.head.y += Math.sin(p.angle) * speed * dt;
-    p.head.x = clamp(p.head.x, -MAP_SIZE / 2, MAP_SIZE / 2);
-    p.head.y = clamp(p.head.y, -MAP_SIZE / 2, MAP_SIZE / 2);
-    p.segments.unshift({ x: p.head.x, y: p.head.y });
-    const maxLen = Math.floor(p.length);
-    while (p.segments.length > maxLen) p.segments.pop();
-    if (p.boost && Date.now() - p.lastBoostFood > 180) {
-      p.lastBoostFood = Date.now(); p.length = Math.max(18, p.length - 0.35); p.score = Math.max(0, p.score - 1);
-      const tail = p.segments[p.segments.length - 1]; if (tail) addFood(tail.x, tail.y, 1, 45);
-    }
-    for (const [id, f] of foods) {
-      if (dist2(p.head, f) < (PLAYER_RADIUS + 14) ** 2) {
-        foods.delete(id); p.score += f.value * 5; p.length += 0.9 + f.value * 0.18;
-      }
-    }
-  }
-  for (const p of players.values()) {
-    if (!p.alive || p.invincible > 0) continue;
-    if (Math.abs(p.head.x) >= MAP_SIZE / 2 - 2 || Math.abs(p.head.y) >= MAP_SIZE / 2 - 2) { killPlayer(p, 'the arena wall'); continue; }
-    for (const other of players.values()) {
-      if (!other.alive || other.id === p.id && p.invincible > 0) continue;
-      const start = other.id === p.id ? 14 : 5;
-      for (let i = start; i < other.segments.length; i += 3) {
-        const s = other.segments[i];
-        if (dist2(p.head, s) < (PLAYER_RADIUS + 7) ** 2) { killPlayer(p, other.id === p.id ? 'your own tail' : other.name); break; }
-      }
-      if (!p.alive) break;
-    }
-  }
-}
-function snapshot() {
-  const board = [...players.values()].filter(p => p.alive).sort((a,b)=>b.score-a.score).slice(0,8).map(p=>({name:p.name,score:Math.floor(p.score),id:p.id}));
-  const viewPlayers = [...players.values()].filter(p => p.alive).map(p => ({
-    id:p.id,name:p.name,skin:p.skin,colors:p.colors,x:p.head.x,y:p.head.y,angle:p.angle,score:Math.floor(p.score),length:Math.floor(p.length),boost:p.boost,segments:p.segments.filter((_,i)=>i%2===0)
-  }));
-  io.emit('state', { t: Date.now(), mapSize: MAP_SIZE, players: viewPlayers, foods: [...foods.values()], leaderboard: board, count: [...players.values()].filter(p=>!p.isBot && p.alive).length, max: MAX_PLAYERS });
-}
-
-io.on('connection', socket => {
-  socket.emit('serverInfo', { count: [...players.values()].filter(p=>!p.isBot && p.alive).length, max: MAX_PLAYERS, mapSize: MAP_SIZE, skins });
-  socket.on('join', ({ name, skin }) => {
-    const humans = [...players.values()].filter(p => !p.isBot && p.alive).length;
-    if (humans >= MAX_PLAYERS) return socket.emit('full', { message: 'Server is full. Please try again soon.' });
-    const p = newPlayer(socket.id, name, skin, false);
-    players.set(socket.id, p);
-    inputs.set(socket.id, { angle: p.angle, boost: false });
-    socket.emit('joined', { id: socket.id, mapSize: MAP_SIZE, player: p });
+io.on('connection', socket=>{
+  socket.emit('hello', { cap:MAX_PLAYERS, online:joinCount() });
+  socket.on('join', data=>{
+    if(joinCount()>=MAX_PLAYERS){ socket.emit('full', { message:'Arena full. Try again soon.' }); return; }
+    const p=makeSnake(socket.id, data && data.name, data && data.skin, false);
+    players.set(socket.id,p); inputs.set(socket.id,{a:p.angle,b:false}); socket.emit('joined',{id:socket.id,map:MAP}); maintainBots();
   });
-  socket.on('input', data => {
-    if (!players.has(socket.id)) return;
-    const angle = Number(data.angle);
-    if (Number.isFinite(angle)) inputs.set(socket.id, { angle, boost: !!data.boost });
-  });
-  socket.on('respawn', ({ name, skin }) => {
-    players.delete(socket.id); inputs.delete(socket.id);
-    const humans = [...players.values()].filter(p => !p.isBot && p.alive).length;
-    if (humans < MAX_PLAYERS) {
-      const p = newPlayer(socket.id, name, skin, false); players.set(socket.id, p); inputs.set(socket.id, { angle: p.angle, boost: false }); socket.emit('joined', { id: socket.id, mapSize: MAP_SIZE, player: p });
-    }
-  });
-  socket.on('disconnect', () => { players.delete(socket.id); inputs.delete(socket.id); });
+  socket.on('input', d=>{ if(players.has(socket.id) && d && Number.isFinite(d.a)) inputs.set(socket.id,{a:d.a,b:!!d.b}); });
+  socket.on('disconnect',()=>{ players.delete(socket.id); inputs.delete(socket.id); maintainBots(); });
 });
-
-ensureFood();
-setInterval(() => step(1 / TICK_RATE), 1000 / TICK_RATE);
-setInterval(snapshot, 1000 / SNAPSHOT_RATE);
-server.listen(PORT, () => console.log(`Neon Worm Arena running on ${PORT}`));
+setInterval(()=>{
+  seedFood(); maintainBots();
+  for(const p of players.values()) updateSnake(p,TICK);
+  collisions(); seedFood();
+  const now=Date.now(); if(now-lastBroadcast>VIEW_PAYLOAD_MS){ io.emit('state', payload()); lastBroadcast=now; }
+}, TICK);
+app.use(express.static(__dirname));
+app.get('/health', (_,res)=>res.json({ok:true, players:joinCount()}));
+server.listen(PORT, ()=>console.log(`Slither Live Compact running on ${PORT}`));

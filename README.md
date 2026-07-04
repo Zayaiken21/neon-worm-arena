@@ -1,14 +1,23 @@
-# Neon Worm Arena
+# Slither Live Compact
 
-Render-ready Node.js multiplayer worm arena.
+Compact Render-ready multiplayer HTML Slither-style game.
+
+## Files
+- `index.html` — all game UI/rendering/client logic
+- `server.js` — multiplayer game server
+- `package.json` — Node dependencies
+- `render.yaml` — Render config
+- `README.md`
 
 ## Render Settings
+Build Command:
+```bash
+npm install --no-audit --no-fund
+```
+Start Command:
+```bash
+npm start
+```
+Root Directory: leave blank.
 
-- Environment: Node
-- Build Command: `npm install --no-audit --no-fund --loglevel=error`
-- Start Command: `npm start`
-- Root Directory: leave blank
-
-## Critical Fix
-
-This version removes `package-lock.json` and adds `.npmrc` using the public npm registry. The previous lock file could make Render hang during `npm install` because it pointed to internal package registry URLs.
+Do not upload `node_modules` or `package-lock.json`.

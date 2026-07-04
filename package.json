@@ -5,13 +5,13 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "build": "node -e \"console.log('No build step needed. Static client served by Express.')\""
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "dependencies": {
-    "@socket.io/admin-ui": "^0.5.1",
     "express": "^4.19.2",
     "socket.io": "^4.7.5"
   }

@@ -1,0 +1,14 @@
+Render settings for this project:
+
+Build Command:
+npm install
+
+Start Command:
+npm start
+
+Environment variables:
+NODE_VERSION=20
+MAX_PLAYERS=15
+MAP_SIZE=5200
+
+IMPORTANT: Do not use `rpm install`. That command fails on Render Node services because rpm is not available.

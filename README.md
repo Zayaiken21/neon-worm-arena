@@ -1,23 +1,14 @@
 # Neon Worm Arena
 
-Render-ready multiplayer Slither-style arena built with Node.js, Express, Socket.IO, and a pure HTML/CSS/JS client.
+Render-ready Node.js multiplayer worm arena.
 
-## Render settings
+## Render Settings
 
-Use these exactly:
-
-- Runtime: Node
-- Build Command: `npm ci`
+- Environment: Node
+- Build Command: `npm install --no-audit --no-fund --loglevel=error`
 - Start Command: `npm start`
-- Node Version: `20.20.2`
+- Root Directory: leave blank
 
-If Render logs show `Running build command 'rpm install'`, Render is using an old/manual dashboard setting. Change it in Render Dashboard > Settings > Build & Deploy.
+## Critical Fix
 
-## Local test
-
-```bash
-npm ci
-npm start
-```
-
-Then open http://localhost:3000
+This version removes `package-lock.json` and adds `.npmrc` using the public npm registry. The previous lock file could make Render hang during `npm install` because it pointed to internal package registry URLs.

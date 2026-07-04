@@ -1,9 +1,13 @@
-RENDER SETTINGS
+USE THESE EXACT RENDER SETTINGS
 
-Service Type: Web Service
 Environment: Node
-Root Directory: leave blank if these files are at the repo root
-Build Command: npm install
+Build Command: npm install --no-audit --no-fund --loglevel=error
 Start Command: npm start
+Root Directory: leave blank
 
-If Render still shows rpm install, go to Settings and manually replace it. Then use Manual Deploy -> Clear build cache & deploy.
+IMPORTANT FIX:
+Do NOT upload package-lock.json. The old lock file had internal package URLs that Render cannot access.
+This fixed folder intentionally does not include package-lock.json.
+
+After updating GitHub:
+Manual Deploy > Clear build cache & deploy

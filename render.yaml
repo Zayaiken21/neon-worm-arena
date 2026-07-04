@@ -3,13 +3,13 @@ services:
     name: neon-worm-arena
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install --no-audit --no-fund --loglevel=error
     startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: 20.20.2
+      - key: NPM_CONFIG_REGISTRY
+        value: https://registry.npmjs.org/
       - key: MAX_PLAYERS
         value: 15
-      - key: MAP_SIZE
-        value: 5200

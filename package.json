@@ -1,19 +1,20 @@
 {
   "name": "neon-worm-arena",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "private": true,
   "description": "Render-ready multiplayer Slither-style worm arena with 15-player rooms.",
   "main": "server.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "build": "node -e \"console.log('Render build OK: no front-end compile step required.')\"",
+    "build": "node -e \"console.log('Build OK: no compile step needed')\"",
     "health": "node -e \"require('fs').accessSync('server.js'); require('fs').accessSync('public/index.html'); console.log('Health files OK')\""
   },
   "engines": {
-    "node": ">=20 <21"
+    "node": "20.x"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
+    "express": "4.19.2",
+    "socket.io": "4.7.5"
   }
 }

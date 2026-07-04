@@ -59,12 +59,12 @@ function update(){
     if(p.cooldown>0) p.cooldown--;
     p.ang += clamp(wrapAngle(p.target-p.ang), -0.16, 0.16);
     const canBoost = p.boost && p.len>28;
-    const speed = canBoost ? 6.25 : 4.15;
-    if(canBoost){ p.len -= 0.035; if(Math.random()<0.26) makeFood(1,{x:p.x-Math.cos(p.ang)*p.r*1.2,y:p.y-Math.sin(p.ang)*p.r*1.2},3); }
+    const speed = canBoost ? 6.65 : 4.55;
+    if(canBoost){ p.len -= 0.075; p.score = Math.max(0, p.score - 0.055); if(Math.random()<0.36) makeFood(1,{x:p.x-Math.cos(p.ang)*p.r*1.55,y:p.y-Math.sin(p.ang)*p.r*1.55},3.5); } else { p.boost=false; }
     p.x += Math.cos(p.ang)*speed; p.y += Math.sin(p.ang)*speed;
     p.body.unshift({x:p.x,y:p.y});
     const want=Math.floor(p.len); while(p.body.length>want) p.body.pop();
-    p.r = clamp(18 + p.len*0.08, 20, 46);
+    p.r = clamp(16 + p.len*0.075, 18, 44);
     for(let i=food.length-1;i>=0;i--){ const f=food[i]; const dx=p.x-f.x, dy=p.y-f.y; if(dx*dx+dy*dy < (p.r+13)*(p.r+13)){ food.splice(i,1); p.score += Math.ceil(f.v); p.len += 0.85 + f.v*0.08; } }
     if(p.cooldown<=0 && (p.x<p.r || p.y<p.r || p.x>MAP-p.r || p.y>MAP-p.r)) kill(p);
   }
@@ -80,7 +80,7 @@ function update(){
     const stride = Math.max(1, Math.ceil((p.body.length||1)/46));
     return {id:p.id,name:p.name,skin:p.skin,x:+p.x.toFixed(1),y:+p.y.toFixed(1),ang:+p.ang.toFixed(3),alive:p.alive,score:Math.floor(p.score),r:+p.r.toFixed(1),body:p.body.filter((_,i)=>i%stride===0).map(b=>({x:+b.x.toFixed(1),y:+b.y.toFixed(1)}))};
   });
-  broadcast({type:'state',map:MAP,server:{count:aliveCount(),max:MAX_PLAYERS},food:food.slice(-300),players:snapPlayers});
+  broadcast({type:'state',map:MAP,server:{count:aliveCount(),max:MAX_PLAYERS},food:food.slice(-280),leaderboard:alive.sort((a,b)=>b.score-a.score).slice(0,5).map(p=>({name:p.name,score:Math.floor(p.score)})),players:snapPlayers});
 }
 setInterval(update,TICK_MS);
 
@@ -104,7 +104,7 @@ server.on('upgrade',(req,socket)=>{
       send(socket,{type:'joined',id:p.id,map:MAP}); broadcast({type:'servers',servers:servers()});
     } else if(msg.type==='input' && p){ if(Number.isFinite(msg.a)) p.target=msg.a; p.boost=!!msg.b; }
     else if(msg.type==='respawn' && p){ respawn(p); send(socket,{type:'joined',id:p.id,map:MAP}); broadcast({type:'servers',servers:servers()}); }
-    else if(msg.type==='home' && p){ kill(p); p.alive=false; broadcast({type:'servers',servers:servers()}); }
+    else if(msg.type==='home' && p){ p.alive=false; p.boost=false; p.body=[]; broadcast({type:'servers',servers:servers()}); }
   }catch{} });
   socket.on('close',()=>removeSocket(socket)); socket.on('end',()=>removeSocket(socket)); socket.on('error',()=>removeSocket(socket));
 });

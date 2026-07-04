@@ -1,9 +1,17 @@
-# Slither Pro Fixed Final
+# Slither Pro Polished
 
-5 root files. Zero dependencies. Render settings:
+Compact Render-ready multiplayer Slither-style HTML game.
 
-Build Command: `npm run build`
-Start Command: `npm start`
-Root Directory: leave blank
+Files:
+- index.html
+- server.js
+- package.json
+- render.yaml
+- README.md
 
-Fixes: menu starts, live arena, smooth movement, no ghost duplicate players, alive count only, death orb drops, own-body safe, enemy/wall kills, home button, mobile joystick, wiener dog skin.
+Render:
+- Build Command: `npm run build`
+- Start Command: `npm start`
+- Root Directory: leave blank
+
+No node_modules, no dependencies.

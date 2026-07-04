@@ -1,23 +1,11 @@
-# Slither Live Compact
+# Slither Live Compact - Render Ready
 
-Compact Render-ready multiplayer HTML Slither-style game.
+Only 5 files. No node_modules. No dependencies.
 
-## Files
-- `index.html` — all game UI/rendering/client logic
-- `server.js` — multiplayer game server
-- `package.json` — Node dependencies
-- `render.yaml` — Render config
-- `README.md`
+Render setup:
+- Environment: Node
+- Build Command: npm run build
+- Start Command: npm start
+- Root Directory: leave blank
 
-## Render Settings
-Build Command:
-```bash
-npm install --no-audit --no-fund
-```
-Start Command:
-```bash
-npm start
-```
-Root Directory: leave blank.
-
-Do not upload `node_modules` or `package-lock.json`.
+If Render says it cannot find the root directory, delete the Root Directory value completely.

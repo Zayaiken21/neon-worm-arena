@@ -1,11 +1,8 @@
 services:
   - type: web
-    name: slither-live-compact
+    name: slither-zero-deps-render
     env: node
     plan: free
-    buildCommand: npm install --no-audit --no-fund
+    buildCommand: npm run build
     startCommand: npm start
     autoDeploy: true
-    envVars:
-      - key: NODE_VERSION
-        value: 20.20.2

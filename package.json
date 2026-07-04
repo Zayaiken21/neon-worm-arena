@@ -1,18 +1,12 @@
 {
-  "name": "slither-live-compact",
+  "name": "slither-zero-deps-render",
   "version": "1.0.0",
   "private": true,
-  "description": "Compact HTML multiplayer slither arena for Render",
-  "main": "server.js",
+  "type": "commonjs",
+  "engines": { "node": ">=20 <21" },
   "scripts": {
     "start": "node server.js",
-    "build": "node -e \"console.log('No build needed - compact HTML game')\""
+    "build": "node -e \"console.log('Build OK - no dependencies needed')\""
   },
-  "engines": {
-    "node": ">=20 <21"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
-  }
+  "dependencies": {}
 }

@@ -6,10 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build": "node -e \"console.log('No build step needed. Static client served by Express.')\""
+    "build": "node -e \"console.log('Render build OK: no front-end compile step required.')\"",
+    "health": "node -e \"require('fs').accessSync('server.js'); require('fs').accessSync('public/index.html'); console.log('Health files OK')\""
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20 <21"
   },
   "dependencies": {
     "express": "^4.19.2",

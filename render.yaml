@@ -1,10 +1,11 @@
 services:
   - type: web
     name: neon-worm-arena
-    runtime: node
+    env: node
     plan: free
-    buildCommand: npm ci
+    buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: 20.20.2

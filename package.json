@@ -1,1 +1,8 @@
-{"name":"slither-pro-advanced","version":"1.0.0","private":true,"engines":{"node":">=20 <21"},"scripts":{"build":"node -e \"console.log('build ok - zero deps')\"","start":"node server.js"},"dependencies":{}}
+{
+  "name":"slither-pro-engagement",
+  "version":"1.0.0",
+  "private":true,
+  "type":"commonjs",
+  "engines":{"node":">=20 <21"},
+  "scripts":{"build":"node -e \"console.log('Build OK - zero dependencies')\"","start":"node server.js"}
+}

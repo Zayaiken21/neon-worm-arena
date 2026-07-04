@@ -1,15 +1,10 @@
-# Slither Pro Advanced
+# Slither Pro Engagement
 
-Compact HTML multiplayer slither game for Render. Zero npm dependencies.
+Compact Render-ready multiplayer HTML game.
 
-Render:
+Render settings:
 - Build Command: `npm run build`
 - Start Command: `npm start`
 - Root Directory: leave blank
 
-Files:
-- index.html
-- server.js
-- package.json
-- render.yaml
-- README.md
+Files only: index.html, server.js, package.json, render.yaml, README.md

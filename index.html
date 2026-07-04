@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Neon Worm Arena</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="noise"></div>
+  <section id="menu" class="panel hero">
+    <div class="brand"><span class="orb"></span><div><b>Neon Worm Arena</b><small>Multiplayer server · <span id="serverCount">0/15</span></small></div></div>
+    <h1>Slither-style arena, polished for web.</h1>
+    <p>Eat glow orbs, grow longer, boost wisely, and make rivals crash into your trail. Server limit is 15 real players.</p>
+    <label>Player name<input id="name" maxlength="16" placeholder="Your name" /></label>
+    <div class="skinTitle">Pick your worm</div>
+    <div id="skins" class="skins"></div>
+    <button id="play">Join Available Server</button>
+    <div class="tips">Mobile: swipe/drag to steer · Hold boost button to sprint · Desktop: mouse + space</div>
+  </section>
+  <section id="hud" class="hud hidden">
+    <div class="pill">Server <b id="hudCount">0/15</b></div>
+    <div class="pill">Score <b id="score">0</b></div>
+    <div class="pill">Length <b id="length">0</b></div>
+  </section>
+  <aside id="leaderboard" class="leaderboard hidden"><h3>Leaderboard</h3><ol id="leaders"></ol></aside>
+  <button id="boost" class="boost hidden">BOOST</button>
+  <section id="dead" class="panel death hidden">
+    <h2>Worm Down</h2><p id="deathText">You crashed.</p><button id="again">Respawn</button><button id="home">Change Worm</button>
+  </section>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>

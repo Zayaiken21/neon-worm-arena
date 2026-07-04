@@ -1,12 +1,12 @@
 {
-  "name": "slither-zero-deps-render",
+  "name": "slither-pro-live",
   "version": "1.0.0",
-  "private": true,
-  "type": "commonjs",
-  "engines": { "node": ">=20 <21" },
+  "description": "Compact HTML multiplayer slither arena for Render with zero npm dependencies.",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "build": "node -e \"console.log('Build OK - no dependencies needed')\""
+    "build": "node -e \"console.log('No build needed - compact HTML game ready')\"",
+    "start": "node server.js"
   },
-  "dependencies": {}
+  "engines": { "node": ">=20 <21" },
+  "license": "MIT"
 }

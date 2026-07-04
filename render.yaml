@@ -1,8 +1,7 @@
 services:
   - type: web
-    name: slither-zero-deps-render
+    name: slither-pro-live
     env: node
     plan: free
     buildCommand: npm run build
     startCommand: npm start
-    autoDeploy: true

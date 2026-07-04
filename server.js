@@ -1,46 +1,130 @@
-const http=require('http'), fs=require('fs'), path=require('path'), crypto=require('crypto');
-const PORT=process.env.PORT||3000, MAX=15, MAP=4200, TICK=50, SEG=15, FOOD_MAX=360;
-const skins=['neon','sunset','ocean','toxic','candy','royal','fire','ice'];
-const rooms=new Map(); let last=Date.now();
-const id=()=>crypto.randomBytes(6).toString('hex');
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)); const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-const rnd=(a,b)=>a+Math.random()*(b-a); const now=()=>Date.now();
-function roomList(){ clean(); return [...rooms.values()].map(r=>({id:r.id,name:r.name,players:[...r.players.values()].filter(p=>!p.bot).length,cap:MAX,map:MAP})); }
-function getRoom(){ clean(); let r=[...rooms.values()].find(x=>[...x.players.values()].filter(p=>!p.bot).length<MAX); if(!r){r={id:id(),name:'Server '+(rooms.size+1),players:new Map(),food:[],created:now()}; rooms.set(r.id,r); for(let i=0;i<FOOD_MAX;i++) food(r); for(let i=0;i<5;i++) bot(r);} return r; }
-function food(r,x=rnd(-MAP/2,MAP/2),y=rnd(-MAP/2,MAP/2),v=1){ r.food.push({id:id(),x,y,v,c:Math.floor(Math.random()*360)}); }
-function makePlayer(name,skin,bot=false){ let x=rnd(-700,700),y=rnd(-700,700),a=rnd(0,Math.PI*2); let body=[]; for(let i=0;i<22;i++) body.push({x:x-Math.cos(a)*i*SEG,y:y-Math.sin(a)*i*SEG}); return {id:id(),name:(name||'Worm').slice(0,16),skin:skins.includes(skin)?skin:'neon',bot,x,y,a,body,len:22,score:0,boost:false,alive:true,last:now(),cool:0}; }
-function bot(r){ let p=makePlayer(['Nova','Byte','Swarm','Glow','Dash','Viper'][Math.floor(Math.random()*6)],skins[Math.floor(Math.random()*skins.length)],true); r.players.set(p.id,p); }
-function join(data){ let r=getRoom(); let p=makePlayer(data.name,data.skin,false); r.players.set(p.id,p); return {playerId:p.id,roomId:r.id,roomName:r.name,map:MAP,cap:MAX}; }
-function leave(pid){ for(const r of rooms.values()) if(r.players.delete(pid)) return true; return false; }
-function input(d){ let r=rooms.get(d.roomId), p=r&&r.players.get(d.playerId); if(!p)return {ok:false}; p.a=Number.isFinite(d.angle)?d.angle:p.a; p.boost=!!d.boost; p.last=now(); return {ok:true}; }
-function state(q){ let r=rooms.get(q.room), p=r&&r.players.get(q.player); if(!r||!p) return {dead:true,rooms:roomList()}; p.last=now(); return {me:p.id,map:MAP,room:{id:r.id,name:r.name,players:[...r.players.values()].filter(x=>!x.bot).length,cap:MAX},players:[...r.players.values()].map(pl=>({id:pl.id,n:pl.name,s:pl.skin,x:pl.x,y:pl.y,a:pl.a,b:pl.body,score:pl.score,bot:pl.bot})),food:r.food,board:[...r.players.values()].sort((a,b)=>b.score-a.score).slice(0,8).map(x=>({n:x.name,s:x.score,bot:x.bot}))}; }
-function step(dt){ for(const r of rooms.values()){
-  while(r.food.length<FOOD_MAX) food(r);
-  const arr=[...r.players.values()];
-  for(const p of arr){
-    if(p.bot){ let near=r.food.reduce((m,f)=>dist(p,f)<dist(p,m)?f:m,r.food[0]||{x:0,y:0}); if(Math.random()<.035)p.a+=rnd(-.8,.8); if(near)p.a=Math.atan2(near.y-p.y,near.x-p.x)+rnd(-.25,.25); p.boost=Math.random()<.012&&p.len>35; }
-    let sp=(p.boost&&p.len>26)?6.2:4.2; if(p.boost&&p.len>26&&p.cool<=0){p.len-=.18;p.score=Math.max(0,Math.floor(p.score-.18));p.cool=3;food(r,p.x,p.y,.8)} p.cool-=dt;
-    p.x=clamp(p.x+Math.cos(p.a)*sp,-MAP/2,MAP/2); p.y=clamp(p.y+Math.sin(p.a)*sp,-MAP/2,MAP/2);
-    p.body.unshift({x:p.x,y:p.y}); while(p.body.length>Math.floor(p.len))p.body.pop();
-    for(let i=r.food.length-1;i>=0;i--){let f=r.food[i]; if(Math.hypot(p.x-f.x,p.y-f.y)<18){r.food.splice(i,1);p.len+=1.8*f.v;p.score+=Math.ceil(10*f.v);}}
-  }
-  for(const p of arr){
-    let dead=false; if(Math.abs(p.x)>=MAP/2-3||Math.abs(p.y)>=MAP/2-3) dead=true;
-    for(const o of arr){ if(dead)break; let start=o.id===p.id?10:2; for(let i=start;i<o.body.length;i+=2){ if(Math.hypot(p.x-o.body[i].x,p.y-o.body[i].y)<13){dead=true;break;} } }
-    if(dead){ for(let i=0;i<p.body.length;i+=2)food(r,p.body[i].x,p.body[i].y,1.5); if(p.bot){r.players.delete(p.id); setTimeout(()=>rooms.has(r.id)&&bot(r),1200)} else {r.players.delete(p.id);} }
-  }
- }}
-function clean(){ const t=now(); for(const r of rooms.values()){ for(const [pid,p] of r.players) if(!p.bot&&t-p.last>30000) r.players.delete(pid); const humans=[...r.players.values()].filter(p=>!p.bot).length; if(humans===0&&t-r.created>60000) rooms.delete(r.id); }}
-setInterval(()=>{let n=Date.now(),dt=(n-last)/50;last=n;step(dt);clean();},TICK);
-function readBody(req){return new Promise(res=>{let b='';req.on('data',c=>b+=c);req.on('end',()=>{try{res(JSON.parse(b||'{}'))}catch{res({})}})})}
-function send(res,obj){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(obj));}
-const server=http.createServer(async(req,res)=>{ const u=new URL(req.url,'http://x');
- if(u.pathname==='/api/rooms')return send(res,roomList());
- if(u.pathname==='/api/join'&&req.method==='POST')return send(res,join(await readBody(req)));
- if(u.pathname==='/api/input'&&req.method==='POST')return send(res,input(await readBody(req)));
- if(u.pathname==='/api/leave'&&req.method==='POST'){let b=await readBody(req);return send(res,{ok:leave(b.playerId)});}
- if(u.pathname==='/api/state')return send(res,state({room:u.searchParams.get('room'),player:u.searchParams.get('player')}));
- let file=u.pathname==='/'?'index.html':u.pathname.slice(1); let p=path.join(__dirname,file); if(!p.startsWith(__dirname)||!fs.existsSync(p)) {res.writeHead(404);return res.end('Not found')}
- res.writeHead(200,{'content-type':file.endsWith('.html')?'text/html':'text/plain'}); fs.createReadStream(p).pipe(res);
+'use strict';
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const PORT = process.env.PORT || 3000;
+const INDEX = fs.readFileSync(path.join(__dirname, 'index.html'));
+const MAX_PLAYERS = 15;
+const MAP = 3600;
+const TICK = 1000 / 30;
+const SEND = 1000 / 15;
+const rooms = new Map();
+const sockets = new Set();
+let ridSeq = 1;
+
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function rand(a,b){ return a + Math.random() * (b-a); }
+function dist(a,b,c,d){ return Math.hypot(a-c,b-d); }
+function id(prefix='id'){ return prefix + Math.random().toString(36).slice(2,8) + Date.now().toString(36).slice(-3); }
+
+function makeFood(n=260){ const arr=[]; for(let i=0;i<n;i++) arr.push({id:id('f'),x:rand(-MAP,MAP),y:rand(-MAP,MAP),r:rand(3.2,7.5),h:Math.floor(rand(0,360))}); return arr; }
+function makeRoom(){
+  const room = { id:'Arena-' + String(ridSeq++).padStart(2,'0'), players:new Map(), food:makeFood(), last:Date.now(), created:Date.now() };
+  rooms.set(room.id, room); return room;
+}
+function openRoom(){
+  for(const r of rooms.values()) if(r.players.size < MAX_PLAYERS) return r;
+  return makeRoom();
+}
+function roomList(){
+  const list = [...rooms.values()].filter(r=>r.players.size>0 || Date.now()-r.created<60000).map(r=>({id:r.id,count:r.players.size,max:MAX_PLAYERS}));
+  if(!list.length){ const r = makeRoom(); return [{id:r.id,count:0,max:MAX_PLAYERS}]; }
+  return list;
+}
+function spawnPlayer(name, skin){
+  const x=rand(-900,900), y=rand(-900,900);
+  const pts=[]; for(let i=0;i<24;i++) pts.push({x:x-i*9,y});
+  return { id:id('p'), name:String(name||'Player').slice(0,14), skin:String(skin||'aqua'), x,y, a:rand(0,Math.PI*2), tx:x+200, ty:y, pts, score:0, alive:true, boost:false, speed:3.8, join:Date.now(), inv:60 };
+}
+function publicPlayer(p){ return {id:p.id,name:p.name,skin:p.skin,x:p.x,y:p.y,a:p.a,pts:p.pts,score:Math.floor(p.score),alive:p.alive}; }
+function broadcastRoom(r, obj){ for(const c of r.players.values()) send(c.ws, obj); }
+function broadcastLobby(){ const msg={type:'rooms', rooms:roomList()}; for(const ws of sockets) if(!ws.roomId) send(ws,msg); }
+
+const server = http.createServer((req,res)=>{
+  if(req.url === '/' || req.url.startsWith('/?')){ res.writeHead(200, {'content-type':'text/html; charset=utf-8','cache-control':'no-store'}); return res.end(INDEX); }
+  res.writeHead(404); res.end('Not found');
 });
-server.listen(PORT,()=>console.log('Slither compact running on '+PORT));
+
+server.on('upgrade', (req, socket) => {
+  const key = req.headers['sec-websocket-key'];
+  if(!key){ socket.destroy(); return; }
+  const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: '+accept+'\r\n\r\n');
+  socket.id = id('s'); socket.alive = true; sockets.add(socket); send(socket,{type:'rooms',rooms:roomList()});
+  socket.on('data', buf => readFrames(socket, buf));
+  socket.on('close', ()=>drop(socket)); socket.on('error', ()=>drop(socket));
+});
+function encode(str){
+  const payload = Buffer.from(str); let header;
+  if(payload.length < 126){ header = Buffer.from([0x81, payload.length]); }
+  else if(payload.length < 65536){ header = Buffer.alloc(4); header[0]=0x81; header[1]=126; header.writeUInt16BE(payload.length,2); }
+  else { header = Buffer.alloc(10); header[0]=0x81; header[1]=127; header.writeBigUInt64BE(BigInt(payload.length),2); }
+  return Buffer.concat([header,payload]);
+}
+function send(ws,obj){ if(ws.destroyed) return; try{ ws.write(encode(JSON.stringify(obj))); }catch(e){} }
+function readFrames(ws, buffer){
+  let off=0;
+  while(off + 2 <= buffer.length){
+    const b1=buffer[off++], b2=buffer[off++]; const opcode=b1&15; let len=b2&127; const masked=!!(b2&128);
+    if(len===126){ if(off+2>buffer.length) return; len=buffer.readUInt16BE(off); off+=2; }
+    else if(len===127){ if(off+8>buffer.length) return; len=Number(buffer.readBigUInt64BE(off)); off+=8; }
+    let mask; if(masked){ if(off+4>buffer.length) return; mask=buffer.slice(off,off+4); off+=4; }
+    if(off+len>buffer.length) return;
+    let data=buffer.slice(off,off+len); off+=len;
+    if(masked){ const out=Buffer.alloc(len); for(let i=0;i<len;i++) out[i]=data[i]^mask[i%4]; data=out; }
+    if(opcode===8){ drop(ws); return; }
+    if(opcode===1){ try{ onMsg(ws, JSON.parse(data.toString())); }catch(e){} }
+  }
+}
+function onMsg(ws,m){
+  if(m.type==='list') return send(ws,{type:'rooms',rooms:roomList()});
+  if(m.type==='join'){
+    let r = m.roomId && rooms.get(m.roomId) && rooms.get(m.roomId).players.size<MAX_PLAYERS ? rooms.get(m.roomId) : openRoom();
+    const p = spawnPlayer(m.name, m.skin); ws.roomId=r.id; ws.playerId=p.id; p.ws=ws; r.players.set(p.id,p);
+    send(ws,{type:'joined',you:p.id,room:{id:r.id,count:r.players.size,max:MAX_PLAYERS},map:MAP});
+    broadcastRoom(r,{type:'notice',text:'A player entered the arena'}); broadcastLobby(); return;
+  }
+  if(m.type==='input' && ws.roomId){ const r=rooms.get(ws.roomId), p=r&&r.players.get(ws.playerId); if(!p||!p.alive) return; p.tx=Number(m.x)||p.x; p.ty=Number(m.y)||p.y; p.boost=!!m.boost; }
+  if(m.type==='home') drop(ws, true);
+}
+function drop(ws, keep=false){
+  if(ws.roomId){ const r=rooms.get(ws.roomId); if(r){ r.players.delete(ws.playerId); if(r.players.size===0 && Date.now()-r.created>30000) rooms.delete(r.id); else broadcastRoom(r,{type:'notice',text:'Arena host switched'}); } }
+  ws.roomId=null; ws.playerId=null; if(!keep){ sockets.delete(ws); try{ws.destroy();}catch(e){} } else send(ws,{type:'rooms',rooms:roomList()}); broadcastLobby();
+}
+function step(){
+  const now=Date.now();
+  for(const r of rooms.values()){
+    const dt=Math.min(2,(now-r.last)/TICK); r.last=now;
+    for(const p of r.players.values()){
+      if(!p.alive) continue;
+      const dx=p.tx-p.x, dy=p.ty-p.y; const target=Math.atan2(dy,dx); let da=((target-p.a+Math.PI*3)%(Math.PI*2))-Math.PI;
+      p.a += clamp(da,-0.16,0.16)*dt;
+      const boosting=p.boost && p.pts.length>30 && p.score>6; const sp=(boosting?6.2:3.9)*dt;
+      p.x=clamp(p.x+Math.cos(p.a)*sp,-MAP,MAP); p.y=clamp(p.y+Math.sin(p.a)*sp,-MAP,MAP);
+      p.pts.unshift({x:p.x,y:p.y});
+      const maxLen=28+Math.floor(p.score/2); while(p.pts.length>maxLen) p.pts.pop();
+      if(boosting){ p.score=Math.max(0,p.score-0.045*dt); if(Math.random()<0.32) r.food.push({id:id('f'),x:p.pts[p.pts.length-1].x,y:p.pts[p.pts.length-1].y,r:4,h:Math.floor(rand(0,360))}); }
+      for(let i=r.food.length-1;i>=0;i--){ const f=r.food[i]; if(dist(p.x,p.y,f.x,f.y)<18+f.r){ p.score += f.r; r.food.splice(i,1); } }
+      p.inv=Math.max(0,p.inv-dt);
+    }
+    while(r.food.length<260) r.food.push({id:id('f'),x:rand(-MAP,MAP),y:rand(-MAP,MAP),r:rand(3.2,7.5),h:Math.floor(rand(0,360))});
+    const players=[...r.players.values()].filter(p=>p.alive);
+    for(const p of players){ if(p.inv>0) continue; let dead=false;
+      if(Math.abs(p.x)>=MAP-5||Math.abs(p.y)>=MAP-5) dead=true;
+      for(const q of players){ if(dead) break; for(let i=(p.id===q.id?16:5); i<q.pts.length; i+=3){ const s=q.pts[i]; if(s && dist(p.x,p.y,s.x,s.y)<16){ dead=true; break; } } }
+      if(dead){ p.alive=false; for(let i=0;i<p.pts.length;i+=3) r.food.push({id:id('f'),x:p.pts[i].x+rand(-8,8),y:p.pts[i].y+rand(-8,8),r:rand(4,8),h:Math.floor(rand(0,360))}); send(p.ws,{type:'dead'}); }
+    }
+  }
+}
+setInterval(step, TICK);
+setInterval(()=>{
+  for(const r of rooms.values()){
+    if(!r.players.size) continue;
+    const state={type:'state',room:{id:r.id,count:r.players.size,max:MAX_PLAYERS},players:[...r.players.values()].map(publicPlayer),food:r.food.slice(0,320),leader:[...r.players.values()].sort((a,b)=>b.score-a.score).slice(0,5).map(p=>({name:p.name,score:Math.floor(p.score)}))};
+    broadcastRoom(r,state);
+  }
+}, SEND);
+setInterval(broadcastLobby, 2000);
+server.listen(PORT,()=>console.log('Slither Pro Live running on :' + PORT));

@@ -35,8 +35,10 @@ function roomList(){
 }
 function spawnPlayer(name, skin){
   const x=rand(-900,900), y=rand(-900,900);
-  const pts=[]; for(let i=0;i<24;i++) pts.push({x:x-i*9,y});
-  return { id:id('p'), name:String(name||'Player').slice(0,14), skin:String(skin||'aqua'), x,y, a:rand(0,Math.PI*2), tx:x+200, ty:y, pts, score:0, alive:true, boost:false, speed:3.8, join:Date.now(), inv:60 };
+  const pts=[]; for(let i=0;i<32;i++) pts.push({x:x-i*7,y});
+  const allowed = new Set(['aqua','sun','violet','lime','rose','dog']);
+  skin = allowed.has(String(skin)) ? String(skin) : 'aqua';
+  return { id:id('p'), name:String(name||'Player').slice(0,14), skin, x,y, a:rand(0,Math.PI*2), tx:x+200, ty:y, pts, score:0, alive:true, boost:false, speed:3.8, join:Date.now(), inv:70 };
 }
 function publicPlayer(p){ return {id:p.id,name:p.name,skin:p.skin,x:p.x,y:p.y,a:p.a,pts:p.pts,score:Math.floor(p.score),alive:p.alive}; }
 function broadcastRoom(r, obj){ for(const c of r.players.values()) send(c.ws, obj); }
@@ -81,6 +83,7 @@ function readFrames(ws, buffer){
 function onMsg(ws,m){
   if(m.type==='list') return send(ws,{type:'rooms',rooms:roomList()});
   if(m.type==='join'){
+    if(ws.roomId) drop(ws, true);
     let r = m.roomId && rooms.get(m.roomId) && rooms.get(m.roomId).players.size<MAX_PLAYERS ? rooms.get(m.roomId) : openRoom();
     const p = spawnPlayer(m.name, m.skin); ws.roomId=r.id; ws.playerId=p.id; p.ws=ws; r.players.set(p.id,p);
     send(ws,{type:'joined',you:p.id,room:{id:r.id,count:r.players.size,max:MAX_PLAYERS},map:MAP});
@@ -101,10 +104,11 @@ function step(){
       if(!p.alive) continue;
       const dx=p.tx-p.x, dy=p.ty-p.y; const target=Math.atan2(dy,dx); let da=((target-p.a+Math.PI*3)%(Math.PI*2))-Math.PI;
       p.a += clamp(da,-0.16,0.16)*dt;
-      const boosting=p.boost && p.pts.length>30 && p.score>6; const sp=(boosting?6.2:3.9)*dt;
+      const boosting=p.boost && p.pts.length>34 && p.score>6; const sp=(boosting?5.9:3.65)*dt;
       p.x=clamp(p.x+Math.cos(p.a)*sp,-MAP,MAP); p.y=clamp(p.y+Math.sin(p.a)*sp,-MAP,MAP);
-      p.pts.unshift({x:p.x,y:p.y});
-      const maxLen=28+Math.floor(p.score/2); while(p.pts.length>maxLen) p.pts.pop();
+      const last=p.pts[0];
+      if(!last || dist(p.x,p.y,last.x,last.y)>4.6) p.pts.unshift({x:p.x,y:p.y});
+      const maxLen=32+Math.floor(p.score/2.1); while(p.pts.length>maxLen) p.pts.pop();
       if(boosting){ p.score=Math.max(0,p.score-0.045*dt); if(Math.random()<0.32) r.food.push({id:id('f'),x:p.pts[p.pts.length-1].x,y:p.pts[p.pts.length-1].y,r:4,h:Math.floor(rand(0,360))}); }
       for(let i=r.food.length-1;i>=0;i--){ const f=r.food[i]; if(dist(p.x,p.y,f.x,f.y)<18+f.r){ p.score += f.r; r.food.splice(i,1); } }
       p.inv=Math.max(0,p.inv-dt);
@@ -114,7 +118,8 @@ function step(){
     for(const p of players){ if(p.inv>0) continue; let dead=false;
       if(Math.abs(p.x)>=MAP-5||Math.abs(p.y)>=MAP-5) dead=true;
       for(const q of players){ if(dead) break; for(let i=(p.id===q.id?16:5); i<q.pts.length; i+=3){ const s=q.pts[i]; if(s && dist(p.x,p.y,s.x,s.y)<16){ dead=true; break; } } }
-      if(dead){ p.alive=false; for(let i=0;i<p.pts.length;i+=3) r.food.push({id:id('f'),x:p.pts[i].x+rand(-8,8),y:p.pts[i].y+rand(-8,8),r:rand(4,8),h:Math.floor(rand(0,360))}); send(p.ws,{type:'dead'}); }
+      if(dead){ p.alive=false; for(let i=0;i<p.pts.length;i+=2) r.food.push({id:id('f'),x:p.pts[i].x+rand(-10,10),y:p.pts[i].y+rand(-10,10),r:rand(4.5,9),h:Math.floor(rand(0,360))});
+        p.score=0; p.pts=[]; send(p.ws,{type:'dead'}); }
     }
   }
 }

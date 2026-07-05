@@ -1,17 +1,15 @@
-# Slither Pro Ready
+# Slither Speed MiniMap
 
-Compact Render-ready multiplayer HTML slither game.
+Compact zero-dependency HTML multiplayer Slither-style game for Render.
 
-## Files
+Render settings:
+- Build Command: npm run build
+- Start Command: npm start
+- Root Directory: leave blank
+
+Files:
 - index.html
 - server.js
 - package.json
 - render.yaml
 - README.md
-
-## Render Settings
-- Build Command: `npm run build`
-- Start Command: `npm start`
-- Root Directory: leave blank
-
-No dependencies and no node_modules.

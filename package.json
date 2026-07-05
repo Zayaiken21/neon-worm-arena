@@ -1,11 +1,1 @@
-{
-  "name": "slither-pro-ready",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Compact HTML multiplayer slither arena for Render.",
-  "engines": { "node": ">=20 <21" },
-  "scripts": {
-    "build": "node -e \"console.log('No build step needed - compact HTML server ready')\"",
-    "start": "node server.js"
-  }
-}
+{"name":"slither-pro-smooth-final","version":"1.0.0","private":true,"type":"commonjs","engines":{"node":">=20 <21"},"scripts":{"build":"node -e \"console.log('build ok')\"","start":"node server.js"},"dependencies":{}}

@@ -4,211 +4,111 @@ const path = require('path');
 const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
-const WORLD = 5600;
 const MAX_PLAYERS = 15;
-const TICK_HZ = 30;
-const SNAP_HZ = 18;
-const FOOD_TARGET = 380;
+const WORLD = 5200;
+const TICK = 40; // 25hz smoother without overheating
+const BASE_SPEED = 250;
+const BOOST_SPEED = 360;
+const TURN = 0.22;
+const MIN_LEN = 18;
+const START_LEN = 36;
+const MAX_FOOD = 320;
 
-const arena = { players: new Map(), food: [], lastSnap: 0 };
-const rand = n => Math.random() * n;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const dist = Math.hypot;
-
-function html(res) {
-  fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
-    res.writeHead(err ? 404 : 200, {
-      'Content-Type': err ? 'text/plain' : 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store'
-    });
-    res.end(err ? 'index.html missing' : data);
+const clients = new Map();
+const players = new Map();
+const foods = [];
+const server = http.createServer((req,res)=>{
+  const file = req.url === '/' ? '/index.html' : req.url.split('?')[0];
+  const p = path.join(__dirname, file);
+  fs.readFile(p,(err,data)=>{
+    if(err){ res.writeHead(404); return res.end('not found'); }
+    res.writeHead(200, {'Content-Type': file.endsWith('.html')?'text/html':'text/plain', 'Cache-Control':'no-store'});
+    res.end(data);
   });
-}
-
-const server = http.createServer((req, res) => html(res));
-
-function alivePlayers() { return [...arena.players.values()].filter(p => p.joined && p.alive); }
-function addFood(target = FOOD_TARGET) {
-  while (arena.food.length < target) {
-    arena.food.push({ x: 80 + rand(WORLD - 160), y: 80 + rand(WORLD - 160), r: 5 + rand(4), h: Math.floor(rand(360)), v: 2 });
-  }
-}
-function sanitizeName(name) {
-  return String(name || 'Player').replace(/[<>]/g, '').trim().slice(0, 14) || 'Player';
-}
-function goodSkin(s) {
-  return ['aqua', 'orange', 'purple', 'green', 'pink', 'dog', 'galaxy'].includes(s) ? s : 'aqua';
-}
-function spawn(p) {
-  const a = rand(Math.PI * 2);
-  const x = 500 + rand(WORLD - 1000);
-  const y = 500 + rand(WORLD - 1000);
-  p.x = x; p.y = y; p.a = a; p.ta = a;
-  p.boost = false; p.alive = true; p.deadAt = 0; p.joined = true;
-  p.score = p.score && p.score > 40 ? Math.max(50, Math.floor(p.score * 0.45)) : 75;
-  p.trail = [];
-  for (let i = 0; i < Math.floor(p.score * 1.25); i++) {
-    p.trail.push({ x: x - Math.cos(a) * i * 8.3, y: y - Math.sin(a) * i * 8.3 });
-  }
-}
-function turnToward(a, t, max) {
-  const d = ((t - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-  return a + clamp(d, -max, max);
-}
-function tailPoint(p) { return p.trail[p.trail.length - 1] || { x: p.x, y: p.y }; }
-function dropFromTail(p, count = 1, value = 1.4) {
-  const t = tailPoint(p);
-  for (let i = 0; i < count; i++) {
-    arena.food.push({
-      x: t.x + rand(16) - 8,
-      y: t.y + rand(16) - 8,
-      r: 4.5 + rand(2.5),
-      h: p.skin === 'dog' ? 28 : (p.hue || Math.floor(rand(360))),
-      v: value
-    });
-  }
-}
-function die(p) {
-  if (!p.alive) return;
-  p.alive = false;
-  p.boost = false;
-  p.deadAt = Date.now();
-  for (let i = 0; i < p.trail.length; i += 3) {
-    const q = p.trail[i];
-    arena.food.push({ x: q.x + rand(20) - 10, y: q.y + rand(20) - 10, r: 5.5 + rand(4), h: p.skin === 'dog' ? 28 : (p.hue || Math.floor(rand(360))), v: 3 });
-  }
-  p.trail = [];
-}
-function compactState() {
-  const players = alivePlayers().map(p => ({
-    id: p.id,
-    name: p.name,
-    skin: p.skin,
-    x: Math.round(p.x),
-    y: Math.round(p.y),
-    a: +p.a.toFixed(3),
-    score: Math.floor(p.score),
-    trail: p.trail.filter((_, i) => i % 2 === 0).map(q => ({ x: Math.round(q.x), y: Math.round(q.y) }))
-  }));
-  players.sort((a, b) => b.score - a.score);
-  return JSON.stringify({ t: 'state', world: WORLD, alive: players.length, max: MAX_PLAYERS, food: arena.food.slice(0, 520), players });
-}
-function makeFrame(str) {
-  const b = Buffer.from(str);
-  if (b.length < 126) return Buffer.concat([Buffer.from([129, b.length]), b]);
-  const h = Buffer.alloc(4); h[0] = 129; h[1] = 126; h.writeUInt16BE(b.length, 2);
-  return Buffer.concat([h, b]);
-}
-function send(sock, str) { try { if (!sock.destroyed) sock.write(makeFrame(str)); } catch (_) {} }
-function broadcast(force = false) {
-  const now = Date.now();
-  if (!force && now - arena.lastSnap < 1000 / SNAP_HZ) return;
-  arena.lastSnap = now;
-  const msg = compactState();
-  for (const p of arena.players.values()) if (p.ws && !p.ws.destroyed) send(p.ws, msg);
-}
-function step() {
-  addFood();
-  const now = Date.now();
-  for (const p of arena.players.values()) {
-    if (!p.joined) continue;
-    if (!p.alive) {
-      if (now - p.deadAt > 1600) spawn(p);
-      continue;
-    }
-    p.a = turnToward(p.a, p.ta, 0.26);
-    const boosting = !!p.boost && p.score > 22 && p.trail.length > 24;
-    const speed = boosting ? 9.2 : 6.7;
-    p.x += Math.cos(p.a) * speed;
-    p.y += Math.sin(p.a) * speed;
-
-    if (p.x < 32 || p.y < 32 || p.x > WORLD - 32 || p.y > WORLD - 32) { die(p); continue; }
-
-    p.trail.unshift({ x: p.x, y: p.y });
-    const maxLen = Math.max(18, Math.floor(p.score * 1.28));
-    while (p.trail.length > maxLen) p.trail.pop();
-
-    if (boosting) {
-      p.score = Math.max(20, p.score - 0.62);
-      if (p.trail.length > 20) p.trail.pop();
-      dropFromTail(p, 1, 1.2);
-    }
-
-    for (let i = arena.food.length - 1; i >= 0; i--) {
-      const f = arena.food[i];
-      if (dist(p.x - f.x, p.y - f.y) < 22 + f.r) {
-        p.score += f.v || 2;
-        arena.food.splice(i, 1);
-      }
-    }
-
-    for (const o of arena.players.values()) {
-      if (!o.alive || !o.joined || o.id === p.id) continue; // own body is safe
-      for (let i = 5; i < o.trail.length; i += 3) {
-        const q = o.trail[i];
-        if (dist(p.x - q.x, p.y - q.y) < 23) { die(p); break; }
-      }
-      if (!p.alive) break;
-    }
-  }
-  broadcast();
-}
-setInterval(step, 1000 / TICK_HZ);
-
-function decodeFrame(buf) {
-  if (buf.length < 6) return null;
-  const op = buf[0] & 15;
-  if (op === 8) return '__close__';
-  let len = buf[1] & 127, off = 2;
-  if (len === 126) { if (buf.length < 8) return null; len = buf.readUInt16BE(2); off = 4; }
-  if (len === 127) return null;
-  const masked = !!(buf[1] & 128);
-  if (!masked || buf.length < off + 4 + len) return null;
-  const mask = buf.slice(off, off + 4); off += 4;
-  const out = Buffer.alloc(len);
-  for (let i = 0; i < len; i++) out[i] = buf[off + i] ^ mask[i % 4];
-  return out.toString();
-}
-
-server.on('upgrade', (req, socket) => {
-  const key = req.headers['sec-websocket-key'];
-  if (!key) return socket.destroy();
-  const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
-  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
-
-  const id = crypto.randomBytes(5).toString('hex');
-  const p = { id, name: 'Player', skin: 'aqua', hue: Math.floor(rand(360)), ws: socket, joined: false, alive: false, score: 75, trail: [], a: 0, ta: 0, boost: false };
-  arena.players.set(id, p);
-  send(socket, JSON.stringify({ t: 'hello', id, alive: alivePlayers().length, max: MAX_PLAYERS }));
-  broadcast(true);
-
-  socket.on('data', buf => {
-    try {
-      const raw = decodeFrame(buf);
-      if (!raw || raw === '__close__') return;
-      const m = JSON.parse(raw);
-      if (m.t === 'join') {
-        if (alivePlayers().length >= MAX_PLAYERS && !p.alive) return send(socket, JSON.stringify({ t: 'full' }));
-        p.name = sanitizeName(m.name);
-        p.skin = goodSkin(m.skin);
-        spawn(p);
-        send(socket, JSON.stringify({ t: 'spawned', id: p.id }));
-        broadcast(true);
-      } else if (m.t === 'input' && p.joined) {
-        const a = Number(m.a);
-        if (Number.isFinite(a)) p.ta = a;
-        p.boost = !!m.boost;
-      } else if (m.t === 'home') {
-        arena.players.delete(p.id);
-        broadcast(true);
-        try { socket.end(); } catch (_) {}
-      }
-    } catch (_) {}
-  });
-  const cleanup = () => { arena.players.delete(p.id); broadcast(true); };
-  socket.on('close', cleanup);
-  socket.on('end', cleanup);
-  socket.on('error', cleanup);
 });
 
-server.listen(PORT, () => console.log('Slither Pro Ready running on port ' + PORT));
+function acceptKey(key){
+  return crypto.createHash('sha1').update(key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+}
+server.on('upgrade',(req,socket)=>{
+  const key = req.headers['sec-websocket-key']; if(!key) return socket.destroy();
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: '+acceptKey(key)+'\r\n\r\n');
+  const id = Math.random().toString(36).slice(2,10);
+  clients.set(id,{socket, input:{x:1,y:0,boost:false}, alive:false, last:Date.now()});
+  send(id,{t:'hello',id, count:aliveCount()});
+  socket.on('data',buf=>onData(id,buf));
+  socket.on('close',()=>remove(id));
+  socket.on('error',()=>remove(id));
+});
+function frame(obj){
+  const s=Buffer.from(JSON.stringify(obj));
+  const h=[]; h.push(129);
+  if(s.length<126) h.push(s.length); else if(s.length<65536) h.push(126, s.length>>8, s.length&255);
+  return Buffer.concat([Buffer.from(h),s]);
+}
+function send(id,obj){ const c=clients.get(id); if(c&&c.socket.writable) c.socket.write(frame(obj)); }
+function broadcast(obj){ const f=frame(obj); for(const c of clients.values()) if(c.socket.writable) c.socket.write(f); }
+function onData(id,buf){
+  try{
+    const op = buf[0]&15; if(op===8) return remove(id);
+    let len=buf[1]&127, off=2; if(len===126){len=buf.readUInt16BE(2);off=4;}
+    const mask=buf.slice(off,off+4); off+=4; const data=Buffer.alloc(len);
+    for(let i=0;i<len;i++) data[i]=buf[off+i]^mask[i%4];
+    const m=JSON.parse(data.toString()); const c=clients.get(id); if(!c)return; c.last=Date.now();
+    if(m.t==='join') join(id,m);
+    if(m.t==='input') c.input={x:clamp(m.x,-1,1),y:clamp(m.y,-1,1),boost:!!m.boost};
+    if(m.t==='home') { players.delete(id); c.alive=false; send(id,{t:'home'}); }
+  }catch(e){}
+}
+function clamp(v,a,b){return Math.max(a,Math.min(b,Number(v)||0));}
+function rand(a,b){return a+Math.random()*(b-a)}
+function spawnFood(n){ for(let i=0;i<n;i++) foods.push({x:rand(120,WORLD-120),y:rand(120,WORLD-120),v:1+Math.random()*2,c:Math.floor(Math.random()*6)}); }
+spawnFood(MAX_FOOD);
+function join(id,m){
+  const c=clients.get(id); if(!c) return;
+  if(aliveCount()>=MAX_PLAYERS) return send(id,{t:'full'});
+  const p={id,name:String(m.name||'Player').slice(0,14),skin:String(m.skin||'neon'),x:rand(700,WORLD-700),y:rand(700,WORLD-700),a:rand(0,Math.PI*2),score:90,len:START_LEN,alive:true,deadAt:0,trail:[]};
+  for(let i=0;i<START_LEN;i++) p.trail.push({x:p.x-Math.cos(p.a)*i*12,y:p.y-Math.sin(p.a)*i*12});
+  players.set(id,p); c.alive=true; send(id,{t:'joined',id,world:WORLD});
+}
+function aliveCount(){ let n=0; for(const p of players.values()) if(p.alive)n++; return n; }
+function remove(id){ clients.delete(id); const p=players.get(id); if(p) dropDeath(p); players.delete(id); }
+function dropDeath(p){
+  const step=Math.max(2, Math.floor(p.trail.length/22));
+  for(let i=0;i<p.trail.length;i+=step){ const q=p.trail[i]; foods.push({x:q.x+rand(-15,15),y:q.y+rand(-15,15),v:2.8,c:Math.floor(Math.random()*6)}); }
+  while(foods.length>MAX_FOOD+180) foods.shift();
+}
+function kill(p){ if(!p.alive)return; dropDeath(p); p.alive=false; p.deadAt=Date.now(); const c=clients.get(p.id); if(c)c.alive=false; send(p.id,{t:'dead'}); players.delete(p.id); }
+function angDiff(a,b){ return Math.atan2(Math.sin(b-a),Math.cos(b-a)); }
+function tick(){
+  const dt=TICK/1000;
+  for(const [id,p] of players){
+    if(!p.alive) continue;
+    const c=clients.get(id); if(!c) {players.delete(id); continue;}
+    const ix=c.input.x, iy=c.input.y;
+    if(Math.hypot(ix,iy)>0.12){ const target=Math.atan2(iy,ix); p.a += angDiff(p.a,target)*TURN; }
+    const boosting = c.input.boost && p.len>MIN_LEN+4 && p.score>6;
+    const speed = boosting ? BOOST_SPEED : BASE_SPEED;
+    p.x += Math.cos(p.a)*speed*dt; p.y += Math.sin(p.a)*speed*dt;
+    p.x = clamp(p.x,10,WORLD-10); p.y = clamp(p.y,10,WORLD-10);
+    p.trail.unshift({x:p.x,y:p.y});
+    if(boosting){
+      p.score=Math.max(0,p.score-0.75); p.len=Math.max(MIN_LEN,p.len-0.22);
+      if(p.trail.length>MIN_LEN){ const tail=p.trail[p.trail.length-1]; if(Math.random()<0.55) foods.push({x:tail.x+rand(-8,8),y:tail.y+rand(-8,8),v:1.2,c:Math.floor(Math.random()*6)}); }
+    }
+    while(p.trail.length>Math.floor(p.len)) p.trail.pop();
+    if(p.x<=14||p.x>=WORLD-14||p.y<=14||p.y>=WORLD-14) kill(p);
+    for(let i=foods.length-1;i>=0;i--){ const f=foods[i]; const d2=(p.x-f.x)**2+(p.y-f.y)**2; if(d2<28*28){ p.score+=Math.round(f.v*4); p.len+=0.95+f.v*0.18; foods.splice(i,1); } }
+  }
+  // enemy body collision, own body safe
+  const arr=[...players.values()].filter(p=>p.alive);
+  for(const p of arr){
+    for(const o of arr){ if(o.id===p.id) continue; for(let i=8;i<o.trail.length;i+=3){ const q=o.trail[i]; if((p.x-q.x)**2+(p.y-q.y)**2<24*24){ kill(p); break; } } if(!p.alive)break; }
+  }
+  while(foods.length<MAX_FOOD) spawnFood(8);
+  const leaderboard=arr.filter(p=>players.has(p.id)).sort((a,b)=>b.score-a.score).slice(0,5).map(p=>({n:p.name,s:Math.floor(p.score)}));
+  const state={t:'state',alive:aliveCount(),foods:foods.slice(-180).map(f=>[Math.round(f.x),Math.round(f.y),Math.round(f.v),f.c]),players:[...players.values()].filter(p=>p.alive).map(p=>({id:p.id,n:p.name,s:p.skin,x:Math.round(p.x),y:Math.round(p.y),a:+p.a.toFixed(2),score:Math.floor(p.score),trail:p.trail.filter((_,i)=>i%3===0).map(q=>[Math.round(q.x),Math.round(q.y)])})),leaderboard};
+  broadcast(state);
+}
+setInterval(tick,TICK);
+server.listen(PORT,()=>console.log('Slither Pro running '+PORT));

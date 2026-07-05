@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: slither-pro-ready
+    name: slither-pro
     env: node
     plan: free
     buildCommand: npm run build

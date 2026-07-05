@@ -9,7 +9,7 @@ const WORLD = 5200;
 const TICK = 40; // 25hz smoother without overheating
 const BASE_SPEED = 250;
 const BOOST_SPEED = 360;
-const TURN = 0.22;
+const TURN = 0.18;
 const MIN_LEN = 18;
 const START_LEN = 36;
 const MAX_FOOD = 320;
@@ -90,14 +90,14 @@ function tick(){
     const boosting = c.input.boost && p.len>MIN_LEN+4 && p.score>6;
     const speed = boosting ? BOOST_SPEED : BASE_SPEED;
     p.x += Math.cos(p.a)*speed*dt; p.y += Math.sin(p.a)*speed*dt;
-    p.x = clamp(p.x,10,WORLD-10); p.y = clamp(p.y,10,WORLD-10);
+    // keep full-speed movement; wall collision happens only at real arena border
     p.trail.unshift({x:p.x,y:p.y});
     if(boosting){
       p.score=Math.max(0,p.score-0.75); p.len=Math.max(MIN_LEN,p.len-0.22);
       if(p.trail.length>MIN_LEN){ const tail=p.trail[p.trail.length-1]; if(Math.random()<0.55) foods.push({x:tail.x+rand(-8,8),y:tail.y+rand(-8,8),v:1.2,c:Math.floor(Math.random()*6)}); }
     }
     while(p.trail.length>Math.floor(p.len)) p.trail.pop();
-    if(p.x<=14||p.x>=WORLD-14||p.y<=14||p.y>=WORLD-14) kill(p);
+    if(p.x<=28||p.x>=WORLD-28||p.y<=28||p.y>=WORLD-28) kill(p);
     for(let i=foods.length-1;i>=0;i--){ const f=foods[i]; const d2=(p.x-f.x)**2+(p.y-f.y)**2; if(d2<28*28){ p.score+=Math.round(f.v*4); p.len+=0.95+f.v*0.18; foods.splice(i,1); } }
   }
   // enemy body collision, own body safe

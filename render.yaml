@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: slither-speed-minimap
+    name: slither-pro-ready
     env: node
     plan: free
     buildCommand: npm run build

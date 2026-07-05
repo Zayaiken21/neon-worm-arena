@@ -1,15 +1,8 @@
-# Slither Speed MiniMap
+# Slither Pro Stable Minimap
 
-Compact zero-dependency HTML multiplayer Slither-style game for Render.
+Compact Render-ready multiplayer HTML game. This build reverts to the stable join/server flow and adds the optimized mini map without breaking matchmaking.
 
-Render settings:
-- Build Command: npm run build
-- Start Command: npm start
+Render:
+- Build Command: `npm run build`
+- Start Command: `npm start`
 - Root Directory: leave blank
-
-Files:
-- index.html
-- server.js
-- package.json
-- render.yaml
-- README.md
